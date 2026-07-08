@@ -1,0 +1,6 @@
+{
+  "name": "Congressional FEC & Society Tracker",
+  "description": "Aggregates and visualizes campaign finance receipts, legislative effectiveness scores (CEL), small-dollar vs PAC donor ratios, committee oversight conflicts, and fraternal society affiliations of US legislators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
