@@ -10,6 +10,8 @@ import {
   FileJson, 
   Smartphone, 
   TrendingUp, 
+  TrendingDown, 
+  Minus, 
   Activity, 
   Coins, 
   ShieldAlert, 
@@ -36,7 +38,9 @@ import {
   Landmark,
   Calendar,
   Send,
-  Building2
+  Building2,
+  Users,
+  Bot
 } from 'lucide-react';
 import { CONGRESSIONAL_DATA } from './data';
 import { RepresentativeCard } from './components/RepresentativeCard';
@@ -59,7 +63,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend
+  Legend,
+  Cell
 } from 'recharts';
 
 // Stable deterministic 5-term PAC trend generator for selected legislator
@@ -78,7 +83,13 @@ const getPacFundingTrendData = (legislator: Legislator) => {
 
   return terms.map((term, index) => {
     // Growth of PAC Donations over past 5 terms, ending at our database value in the 119th term
-    const stepMultiplier = 0.4 + (index * 0.15) + ((seed % 10) / 100);
+    let stepMultiplier = 0.4 + (index * 0.15) + ((seed % 10) / 100);
+    
+    // Add some deliberate spikes based on seed for testing spike highlights
+    if (index === 2 && seed % 2 === 0) stepMultiplier += 0.4;
+    if (index === 1 && seed % 3 === 0) stepMultiplier -= 0.2;
+    if (index === 3 && seed % 4 === 0) stepMultiplier += 0.5;
+
     const pacFunding = Math.round(basePAC * stepMultiplier);
 
     // Corporate votes cast (out of max 30 key votes)
@@ -138,6 +149,7 @@ interface NotificationAlert {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'watchdog' | 'flags' | 'script' | 'functions' | 'expo' | 'json' | 'debate' | 'press' | 'credentials'>('dashboard');
+  const [dashboardTab, setDashboardTab] = useState<'directory' | 'scorecard' | 'metrics' | 'pac' | 'events' | 'advisor'>('directory');
   
   // Custom Watchdog Transparency Flags (User Configurable)
   const [customFlags, setCustomFlags] = useState<CustomFlag[]>(() => {
@@ -363,6 +375,38 @@ export default function App() {
   const [activeBriefingLegislator, setActiveBriefingLegislator] = useState<any | null>(null);
   const [briefingText, setBriefingText] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+
+  // Committee Findings Agent States
+  const [activeFindingsLegislator, setActiveFindingsLegislator] = useState<any | null>(null);
+  const [findingsText, setFindingsText] = useState<string | null>(null);
+  const [findingsLoading, setFindingsLoading] = useState(false);
+
+  const handleScanFindings = async (legislator: any) => {
+    setActiveFindingsLegislator(legislator);
+    setFindingsText(null);
+    setFindingsLoading(true);
+
+    try {
+      const res = await fetch("/api/gemini/committee-findings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          legislatorName: legislator.name,
+          party: legislator.party,
+          state: legislator.state,
+          role: legislator.role,
+          bio: legislator.bio_summary
+        }),
+      });
+      const data = await res.json();
+      setFindingsText(data.findings || "No findings generated.");
+    } catch (error) {
+      console.error(error);
+      setFindingsText("Failed to retrieve committee findings. Please try again later.");
+    } finally {
+      setFindingsLoading(false);
+    }
+  };
 
   // Send message to AI Advisor
   const handleSendAdvisorMessage = async (customMsg?: string) => {
@@ -1084,11 +1128,81 @@ export default function App() {
   // Search & Filter state
   const [search, setSearch] = useState('');
   const [trendLegislatorId, setTrendLegislatorId] = useState<string>('M000355');
+  const [pacChartView, setPacChartView] = useState<'individual' | 'comparison'>('individual');
+  const [comparisonLegislatorIds, setComparisonLegislatorIds] = useState<string[]>(['M000355', 'C001098']);
+
+  // PAC Anomaly Tooltip States
+  const [showSpikes, setShowSpikes] = useState(true);
+  const [showDips, setShowDips] = useState(true);
+  const [selectedAnomaly, setSelectedAnomaly] = useState<{
+    term: string;
+    fullTerm: string;
+    pacFunding: number;
+    avg: number;
+    type: 'spike' | 'dip';
+    legislatorName: string;
+  } | null>(null);
+  const [anomalyExplanation, setAnomalyExplanation] = useState<string | null>(null);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+
+  const handleAnomalyClick = async (entry: any, avg: number, legislator: Legislator) => {
+    const type = entry.pacFunding > avg ? 'spike' : 'dip';
+    setSelectedAnomaly({
+      term: entry.term,
+      fullTerm: entry.fullTerm,
+      pacFunding: entry.pacFunding,
+      avg,
+      type,
+      legislatorName: legislator.name
+    });
+    setAnomalyExplanation(null);
+    setAnomalyLoading(true);
+
+    try {
+      const res = await fetch("/api/gemini/pac-anomaly-explanation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          legislatorName: legislator.name,
+          party: legislator.party,
+          state: legislator.state,
+          term: entry.fullTerm,
+          pacFunding: entry.pacFunding,
+          averageFunding: avg,
+          type
+        })
+      });
+      const data = await res.json();
+      setAnomalyExplanation(data.explanation || "No explanation returned.");
+    } catch (err) {
+      console.error(err);
+      setAnomalyExplanation("Failed to generate AI analysis of this funding anomaly. Please try again later.");
+    } finally {
+      setAnomalyLoading(false);
+    }
+  };
   const [partyFilter, setPartyFilter] = useState<'All' | 'Democrat' | 'Republican' | 'Independent'>('All');
   const [roleFilter, setRoleFilter] = useState<'All' | 'Representative' | 'Senator'>('All');
   const [societyFilter, setSocietyFilter] = useState<string>('All');
   const [integrityFilter, setIntegrityFilter] = useState<'All' | 'donor_contract' | 'insider_trading' | 'lobbyist_favoritism' | 'secret_litigation' | 'clean'>('All');
   const [sortBy, setSortBy] = useState<'highest_pac' | 'lowest_pac' | 'highest_transparency' | 'lowest_transparency' | 'society_count' | 'highest_alerts' | 'highest_alignment' | 'lowest_alignment'>('highest_alignment');
+
+  // Compare Mode state
+  const [isCompareMode, setIsCompareMode] = useState(false);
+  const [compareSelection, setCompareSelection] = useState<string[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+
+  const handleToggleCompare = (legislatorId: string) => {
+    setCompareSelection(prev => {
+      if (prev.includes(legislatorId)) {
+        return prev.filter(id => id !== legislatorId);
+      }
+      if (prev.length < 2) {
+        return [...prev, legislatorId];
+      }
+      return prev;
+    });
+  };
 
   // Helper to calculate Factual Legislative Transparency Index (0 to 100)
   const calculateTransparencyIndex = (legislator: Legislator): number => {
@@ -1742,8 +1856,67 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <div className="space-y-8 animate-fade-in">
             
+                        {/* Dashboard Sub-Navigation */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-6 bg-slate-900/60 p-2 rounded-2xl border border-slate-800/80 w-full max-w-4xl mx-auto shadow-md">
+              <button
+                onClick={() => setDashboardTab('directory')}
+                className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
+                  dashboardTab === 'directory' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Users size={14} />
+                Members Directory
+              </button>
+              <button
+                onClick={() => setDashboardTab('scorecard')}
+                className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
+                  dashboardTab === 'scorecard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <SlidersHorizontal size={14} />
+                Watchlist & Scorecard
+              </button>
+              <button
+                onClick={() => setDashboardTab('metrics')}
+                className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
+                  dashboardTab === 'metrics' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Activity size={14} />
+                Quick Metrics
+              </button>
+              <button
+                onClick={() => setDashboardTab('pac')}
+                className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
+                  dashboardTab === 'pac' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Coins size={14} />
+                PAC Trends
+              </button>
+              <button
+                onClick={() => setDashboardTab('events')}
+                className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
+                  dashboardTab === 'events' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <BellRing size={14} />
+                Live Feed & Outreach
+              </button>
+              <button
+                onClick={() => setDashboardTab('advisor')}
+                className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
+                  dashboardTab === 'advisor' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Bot size={14} />
+                AI Advisor
+              </button>
+            </div>
+
             {/* AI Advisor Chatbot */}
-            <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 max-w-3xl mx-auto">
+            {dashboardTab === 'advisor' && (
+              <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 max-w-3xl mx-auto animate-fade-in">
               
               {/* AI Civic Advisor Chatbox */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between h-[360px] lg:h-auto">
@@ -1828,9 +2001,11 @@ export default function App() {
               </div>
 
             </div>
+            )}
 
             {/* NEW: CAPITOL WATCHDOG LIVE EVENTS FEED & ELECTED OFFICIAL PORTAL */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {dashboardTab === 'events' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
               
               {/* Left Column: Breaking News & Live Legislative Watchdog Feed (7 cols) & Timeline */}
               <div className="lg:col-span-7 flex flex-col gap-6">
@@ -2331,8 +2506,11 @@ export default function App() {
               </div>
 
             </div>
+            )}
 
             {/* Quick Metrics Statistics Widgets */}
+            {dashboardTab === 'metrics' && (
+              <div className="space-y-6 animate-fade-in">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
                 <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -2426,7 +2604,11 @@ export default function App() {
               </div>
             )}
 
+            </div>
+            )}
+
             {/* Value Scorecard Settings & Watchlist Section */}
+            {dashboardTab === 'scorecard' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
               {/* Left Column: Watchlist */}
@@ -2665,9 +2847,10 @@ export default function App() {
               </div>
 
             </div>
+            )}
 
-            {/* PAC Funding Trend & Legislative Alignment Section */}
-            {(() => {
+                        {/* PAC Funding Trend & Legislative Alignment Section */}
+            {dashboardTab === 'pac' && (() => {
               const trendLegislator = legislators.find(l => l.legislator_id === trendLegislatorId) || legislators[0];
               if (!trendLegislator) return null;
               
@@ -2684,13 +2867,38 @@ export default function App() {
                 ? 'text-red-400 border-red-900/40 bg-red-950/25' 
                 : 'text-emerald-400 border-emerald-900/40 bg-emerald-950/25';
 
+              const comparisonLegislators = legislators.filter(l => comparisonLegislatorIds.includes(l.legislator_id));
+              
+              // Build comparison data
+              const comparisonData = (() => {
+                const terms = [
+                  { name: "115th Congress (2017-18)", short: "115th" },
+                  { name: "116th Congress (2019-20)", short: "116th" },
+                  { name: "117th Congress (2021-22)", short: "117th" },
+                  { name: "118th Congress (2023-24)", short: "118th" },
+                  { name: "119th Congress (2025-26)", short: "119th" },
+                ];
+                return terms.map((term, index) => {
+                  const dataPoint: any = { term: term.short, fullTerm: term.name };
+                  comparisonLegislators.forEach(leg => {
+                    const seed = leg.legislator_id.charCodeAt(0) + (leg.legislator_id.charCodeAt(1) || 0);
+                    const basePAC = leg.aipac_funding_total || 50000;
+                    const stepMultiplier = 0.4 + (index * 0.15) + ((seed % 10) / 100);
+                    dataPoint[leg.legislator_id] = Math.round(basePAC * stepMultiplier);
+                  });
+                  return dataPoint;
+                });
+              })();
+
+              const chartColors = ['#4f46e5', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#06b6d4', '#f97316', '#8b5cf6'];
+
               return (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden space-y-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden space-y-6 animate-fade-in">
                   <div className="absolute right-0 top-0 bottom-0 w-1/4 bg-gradient-to-l from-indigo-500/5 to-transparent pointer-events-none" />
                   
-                  {/* Section Title, Description and Representative Selector */}
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-850">
-                    <div>
+                  {/* Section Title, Description and Selectors */}
+                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 pb-4 border-b border-slate-850">
+                    <div className="flex-1">
                       <h3 className="text-sm font-black tracking-wider text-indigo-400 uppercase flex items-center gap-2">
                         <Activity size={14} className="text-indigo-400" />
                         PAC Funding Trend & Legislative Alignment Tracker
@@ -2700,180 +2908,448 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* Selector */}
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Select Lawmaker:</span>
-                      <select
-                        value={trendLegislatorId}
-                        onChange={(e) => setTrendLegislatorId(e.target.value)}
-                        className="h-10 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors max-w-xs"
-                      >
-                        {legislators.map((l) => (
-                          <option key={l.legislator_id} value={l.legislator_id}>
-                            {l.name} ({l.party === 'Democrat' ? 'D' : l.party === 'Republican' ? 'R' : 'I'} - {l.state})
-                          </option>
-                        ))}
-                      </select>
+                    <div className="flex flex-col gap-3 lg:items-end shrink-0">
+                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start lg:self-end">
+                        <button
+                          onClick={() => setPacChartView('individual')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pacChartView === 'individual' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          Individual Detail
+                        </button>
+                        <button
+                          onClick={() => setPacChartView('comparison')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pacChartView === 'comparison' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          Compare Multiple
+                        </button>
+                      </div>
+
+                      {pacChartView === 'individual' ? (
+                        <div className="flex items-center gap-3 w-full lg:w-auto">
+                          <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Select Lawmaker:</span>
+                          <select
+                            value={trendLegislatorId}
+                            onChange={(e) => setTrendLegislatorId(e.target.value)}
+                            className="h-10 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors w-full lg:max-w-[240px]"
+                          >
+                            {legislators.map((l) => (
+                              <option key={l.legislator_id} value={l.legislator_id}>
+                                {l.name} ({l.party === 'Democrat' ? 'D' : l.party === 'Republican' ? 'R' : 'I'} - {l.state})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2 w-full lg:w-auto">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Add Lawmaker:</span>
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val && !comparisonLegislatorIds.includes(val)) {
+                                  setComparisonLegislatorIds([...comparisonLegislatorIds, val]);
+                                }
+                              }}
+                              className="h-10 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors w-full lg:max-w-[240px]"
+                            >
+                              <option value="" disabled>Select to add...</option>
+                              {legislators.filter(l => !comparisonLegislatorIds.includes(l.legislator_id)).map((l) => (
+                                <option key={l.legislator_id} value={l.legislator_id}>
+                                  {l.name} ({l.party === 'Democrat' ? 'D' : l.party === 'Republican' ? 'R' : 'I'} - {l.state})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {pacChartView === 'comparison' && comparisonLegislators.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pb-2">
+                      {comparisonLegislators.map((l, idx) => (
+                        <div key={l.legislator_id} className="flex items-center gap-2 bg-slate-950 border border-slate-800 pl-2 pr-1 py-1 rounded-lg">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: chartColors[idx % chartColors.length] }} />
+                          <span className="text-xs font-semibold text-slate-300">{l.name}</span>
+                          <button 
+                            onClick={() => setComparisonLegislatorIds(comparisonLegislatorIds.filter(id => id !== l.legislator_id))}
+                            className="text-slate-500 hover:text-red-400 ml-1 p-0.5 rounded-md hover:bg-slate-900 transition-colors"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      {comparisonLegislators.length === 0 && (
+                        <span className="text-xs text-slate-500 italic">No lawmakers selected for comparison.</span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Inside Layout: Statistics on Left, Recharts on Right */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                     
-                    {/* Left 4 Cols: Performance Summary & Watchdog Verdict */}
-                    <div className="lg:col-span-4 flex flex-col justify-between bg-slate-950/50 border border-slate-850 p-4.5 rounded-xl space-y-4">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${partyBadge}`}>
-                            {trendLegislator.role} • {trendLegislator.party} • {trendLegislator.state}
-                          </span>
+                    {pacChartView === 'individual' && (
+                      <div className="lg:col-span-4 flex flex-col justify-between bg-slate-950/50 border border-slate-850 p-4.5 rounded-xl space-y-4">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${partyBadge}`}>
+                              {trendLegislator.role} • {trendLegislator.party} • {trendLegislator.state}
+                            </span>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="bg-slate-900 border border-slate-850 p-3 rounded-lg flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-400">Total PAC Funding:</span>
+                              <span className="text-sm font-bold text-white font-mono">
+                                ${(trendLegislator.aipac_funding_total || 0).toLocaleString()}
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-900 border border-slate-850 p-3 rounded-lg flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-400">Corporate Vote Index:</span>
+                              <span className="text-sm font-bold text-indigo-400 font-mono">
+                                {trendLegislator.corporate_vote_index}%
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-900 border border-slate-850 p-3 rounded-lg flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-400">5-Term PAC Growth:</span>
+                              <span className="text-sm font-bold text-emerald-400 font-mono">
+                                +{growthPct}%
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="space-y-3">
-                          <div className="bg-slate-900 border border-slate-850 p-3 rounded-lg flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-slate-400">Total PAC Funding:</span>
-                            <span className="text-sm font-bold text-white font-mono">
-                              ${(trendLegislator.aipac_funding_total || 0).toLocaleString()}
-                            </span>
+                        {/* Watchdog Verdict Narrative */}
+                        <div className="p-3 bg-indigo-950/15 border border-indigo-900/30 rounded-lg space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <ShieldAlert size={12} className="text-indigo-400" />
+                            <span className="text-[10px] font-black uppercase text-indigo-300 tracking-wider">Watchdog Evaluation Verdict</span>
                           </div>
-
-                          <div className="bg-slate-900 border border-slate-850 p-3 rounded-lg flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-slate-400">Corporate Vote Index:</span>
-                            <span className="text-sm font-bold text-indigo-400 font-mono">
-                              {trendLegislator.corporate_vote_index}%
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-900 border border-slate-850 p-3 rounded-lg flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-slate-400">5-Term PAC Growth:</span>
-                            <span className="text-sm font-bold text-emerald-400 font-mono">
-                              +{growthPct}%
-                            </span>
-                          </div>
+                          <p className="text-[10.5px] leading-relaxed text-slate-300">
+                            {trendLegislator.corporate_vote_index > 70 ? (
+                              <span>
+                                <strong>{trendLegislator.name}</strong> shows a strong positive correlation between increased PAC campaign contributions and votes matching corporate interest agendas, reaching a <strong>{trendLegislator.corporate_vote_index}%</strong> alignment index in the 119th Congress.
+                              </span>
+                            ) : trendLegislator.corporate_vote_index < 30 ? (
+                              <span>
+                                <strong>{trendLegislator.name}</strong> has maintained low corporate alignment over time, resisting special-interest PAC leverage even as general campaign funding costs rise, reflecting strong grassroots commitment.
+                              </span>
+                            ) : (
+                              <span>
+                                <strong>{trendLegislator.name}</strong> displays a moderate corporate lobby alignment index of <strong>{trendLegislator.corporate_vote_index}%</strong>, indicating a selective or split pattern of support across industry sectors and PAC programs.
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
+                    )}
 
-                      {/* Watchdog Verdict Narrative */}
-                      <div className="p-3 bg-indigo-950/15 border border-indigo-900/30 rounded-lg space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <ShieldAlert size={12} className="text-indigo-400" />
-                          <span className="text-[10px] font-black uppercase text-indigo-300 tracking-wider">Watchdog Evaluation Verdict</span>
-                        </div>
-                        <p className="text-[10.5px] leading-relaxed text-slate-300">
-                          {trendLegislator.corporate_vote_index > 70 ? (
-                            <span>
-                              <strong>{trendLegislator.name}</strong> shows a strong positive correlation between increased PAC campaign contributions and votes matching corporate interest agendas, reaching a <strong>{trendLegislator.corporate_vote_index}%</strong> alignment index in the 119th Congress.
-                            </span>
-                          ) : trendLegislator.corporate_vote_index < 30 ? (
-                            <span>
-                              <strong>{trendLegislator.name}</strong> has maintained low corporate alignment over time, resisting special-interest PAC leverage even as general campaign funding costs rise, reflecting strong grassroots commitment.
-                            </span>
-                          ) : (
-                            <span>
-                              <strong>{trendLegislator.name}</strong> displays a moderate corporate lobby alignment index of <strong>{trendLegislator.corporate_vote_index}%</strong>, indicating a selective or split pattern of support across industry sectors and PAC programs.
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Right 8 Cols: Recharts Chart */}
-                    <div className="lg:col-span-8 bg-slate-950/40 border border-slate-850 p-4 rounded-xl flex flex-col justify-between min-h-[300px]">
+                    {/* Right Cols: Recharts Chart */}
+                    <div className={`${pacChartView === 'individual' ? 'lg:col-span-8' : 'lg:col-span-12'} bg-slate-950/40 border border-slate-850 p-4 rounded-xl flex flex-col justify-between min-h-[300px]`}>
                       
                       {/* Chart Title / Legend Summary */}
                       <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 border-b border-slate-900 pb-2 mb-4">
-                        <span className="flex items-center gap-1">
-                          <span className="w-2 h-2 rounded bg-indigo-500 inline-block"></span>
-                          Corporate PAC Funding ($)
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="w-2.5 h-0.5 bg-amber-400 inline-block"></span>
-                          Corporate Aligned Votes (Out of 30 Key Votes)
-                        </span>
+                        {pacChartView === 'individual' ? (
+                          <>
+                          <div className="flex flex-col gap-1">
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded bg-indigo-500 inline-block"></span>
+                              Corporate PAC Funding ($)
+                            </span>
+                            <span className="flex items-center gap-2 text-[9px] text-slate-500">
+                              <button 
+                                onClick={() => setShowSpikes(!showSpikes)}
+                                className={`flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-80 ${showSpikes ? 'opacity-100' : 'opacity-40 grayscale'}`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded bg-red-500 inline-block"></span>
+                                High Spike (&gt;35% above avg)
+                              </button>
+                              <button 
+                                onClick={() => setShowDips(!showDips)}
+                                className={`flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-80 ${showDips ? 'opacity-100' : 'opacity-40 grayscale'}`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded bg-emerald-500 inline-block"></span>
+                                Low Dip (&gt;35% below avg)
+                              </button>
+                            </span>
+                          </div>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2.5 h-0.5 bg-amber-400 inline-block"></span>
+                            Corporate Aligned Votes (Out of 30 Key Votes)
+                          </span>
+                          </>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            PAC Contributions Comparison ($) over 5 Terms
+                          </span>
+                        )}
                       </div>
 
+
+                      {/* Summary Stats Panel */}
+                      {(() => {
+                        let absoluteVariance = 0;
+                        let percentGrowth = 0;
+                        let title = "Selected Time Range Growth";
+
+                        if (pacChartView === 'individual') {
+                          absoluteVariance = latestData.pacFunding - earliestData.pacFunding;
+                          percentGrowth = earliestData.pacFunding > 0 ? (absoluteVariance / earliestData.pacFunding) * 100 : 0;
+                          title = "5-Term Funding Variance";
+                        } else if (comparisonLegislators.length > 0) {
+                          let earliestTotal = 0;
+                          let latestTotal = 0;
+                          comparisonLegislators.forEach(leg => {
+                            earliestTotal += comparisonData[0][leg.legislator_id] || 0;
+                            latestTotal += comparisonData[comparisonData.length - 1][leg.legislator_id] || 0;
+                          });
+                          absoluteVariance = latestTotal - earliestTotal;
+                          percentGrowth = earliestTotal > 0 ? (absoluteVariance / earliestTotal) * 100 : 0;
+                          title = "Aggregate 5-Term Funding Variance";
+                        } else {
+                          return null;
+                        }
+
+                        const isPositive = absoluteVariance > 0;
+                        const isNegative = absoluteVariance < 0;
+                        // Match the existing styling where growth is emerald (or use indigo as a neutral primary)
+                        const colorClass = isPositive ? 'text-emerald-400' : isNegative ? 'text-indigo-400' : 'text-slate-400';
+                        const sign = isPositive ? '+' : '';
+
+                        return (
+                          <div className="flex items-center gap-6 mb-4 px-4 py-3 bg-slate-900/60 border border-slate-800 rounded-xl">
+                            <div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{title}</div>
+                              <div className="flex items-end gap-3">
+                                <span className={`text-xl font-bold font-mono tracking-tight ${colorClass}`}>
+                                  {sign}${Math.abs(absoluteVariance).toLocaleString()}
+                                </span>
+                                <div className={`flex items-center gap-1 text-sm font-bold mb-0.5 ${colorClass}`}>
+                                  {isPositive ? <TrendingUp size={14} /> : isNegative ? <TrendingDown size={14} /> : <Minus size={14} />}
+                                  <span>{sign}{percentGrowth.toFixed(1)}%</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {/* Recharts Container */}
-                      <div className="flex-1 min-h-[220px] w-full">
+                      <div className="flex-1 min-h-[260px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart
-                            data={trendData}
-                            margin={{ top: 10, right: 10, bottom: 5, left: -10 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                            <XAxis 
-                              dataKey="term" 
-                              stroke="#64748b" 
-                              fontSize={10} 
-                              fontWeight="bold"
-                              tickLine={false}
-                            />
-                            {/* Left Y Axis for PAC Funding */}
-                            <YAxis 
-                              yAxisId="left" 
-                              stroke="#818cf8" 
-                              fontSize={10} 
-                              fontWeight="medium"
-                              tickLine={false}
-                              tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
-                            />
-                            {/* Right Y Axis for Aligned Votes */}
-                            <YAxis 
-                              yAxisId="right" 
-                              orientation="right" 
-                              stroke="#f59e0b" 
-                              fontSize={10} 
-                              fontWeight="medium"
-                              tickLine={false}
-                              domain={[0, 30]}
-                            />
-                            <Tooltip
-                              contentStyle={{ 
-                                backgroundColor: '#0f172a', 
-                                border: '1px solid #334155', 
-                                borderRadius: '12px',
-                                padding: '10px'
-                              }}
-                              itemStyle={{ color: '#e2e8f0', fontSize: '11px' }}
-                              labelStyle={{ color: '#94a3b8', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
-                              formatter={(value: any, name: any, props: any) => {
-                                if (name === "pacFunding") {
-                                  return [`$${value.toLocaleString()}`, "PAC Contributions"];
-                                }
-                                if (name === "alignedVotes") {
-                                  return [`${value} of 30 (${props.payload.corporatePercentage}%)`, "Corporate Aligned Votes"];
-                                }
-                                return [value, name];
-                              }}
-                              labelFormatter={(label) => {
-                                const matched = trendData.find(d => d.term === label);
-                                return matched ? matched.fullTerm : label;
-                              }}
-                            />
-                            <Bar 
-                              yAxisId="left" 
-                              dataKey="pacFunding" 
-                              fill="#4f46e5" 
-                              radius={[4, 4, 0, 0]} 
-                              maxBarSize={45}
-                            />
-                            <Line 
-                              yAxisId="right" 
-                              type="monotone" 
-                              dataKey="alignedVotes" 
-                              stroke="#f59e0b" 
-                              strokeWidth={3} 
-                              dot={{ r: 5, strokeWidth: 2, fill: '#0f172a' }} 
-                              activeDot={{ r: 7 }} 
-                            />
-                          </ComposedChart>
+                          {pacChartView === 'individual' ? (
+                            <ComposedChart
+                              data={trendData}
+                              margin={{ top: 10, right: 10, bottom: 5, left: -10 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                              <XAxis 
+                                dataKey="term" 
+                                stroke="#64748b" 
+                                fontSize={10} 
+                                fontWeight="bold"
+                                tickLine={false}
+                              />
+                              <YAxis 
+                                yAxisId="left" 
+                                stroke="#818cf8" 
+                                fontSize={10} 
+                                fontWeight="medium"
+                                tickLine={false}
+                                tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
+                              />
+                              <YAxis 
+                                yAxisId="right" 
+                                orientation="right" 
+                                stroke="#f59e0b" 
+                                fontSize={10} 
+                                fontWeight="medium"
+                                tickLine={false}
+                                domain={[0, 30]}
+                              />
+                              <Tooltip
+                                contentStyle={{ 
+                                  backgroundColor: '#0f172a', 
+                                  border: '1px solid #334155', 
+                                  borderRadius: '12px',
+                                  padding: '10px'
+                                }}
+                                itemStyle={{ color: '#e2e8f0', fontSize: '11px' }}
+                                labelStyle={{ color: '#94a3b8', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
+                                formatter={(value: any, name: any, props: any) => {
+                                  if (name === "pacFunding") {
+                                    return [`$${value.toLocaleString()}`, "PAC Contributions"];
+                                  }
+                                  if (name === "alignedVotes") {
+                                    return [`${value} of 30 (${props.payload.corporatePercentage}%)`, "Corporate Aligned Votes"];
+                                  }
+                                  return [value, name];
+                                }}
+                                labelFormatter={(label) => {
+                                  const matched = trendData.find(d => d.term === label);
+                                  return matched ? matched.fullTerm : label;
+                                }}
+                              />
+                                                            <Bar 
+                                yAxisId="left" 
+                                dataKey="pacFunding" 
+                                radius={[4, 4, 0, 0]} 
+                                maxBarSize={45}
+                              >
+                                {trendData.map((entry, index) => {
+                                  const avg = trendData.reduce((sum, d) => sum + d.pacFunding, 0) / trendData.length;
+                                  let fill = "#4f46e5"; // default indigo
+                                  let isAnomaly = false;
+                                  let isActiveAnomaly = false;
+
+                                  if (entry.pacFunding > avg * 1.35) {
+                                    isAnomaly = true;
+                                    if (showSpikes) {
+                                      fill = "#ef4444"; // red for high spike
+                                      isActiveAnomaly = true;
+                                    }
+                                  } else if (entry.pacFunding < avg * 0.65) {
+                                    isAnomaly = true;
+                                    if (showDips) {
+                                      fill = "#10b981"; // emerald for low dip
+                                      isActiveAnomaly = true;
+                                    }
+                                  }
+                                  
+                                  return (
+                                    <Cell 
+                                      key={`cell-${index}`} 
+                                      fill={fill} 
+                                      cursor={isActiveAnomaly ? "pointer" : "default"}
+                                      onClick={() => {
+                                        if (isActiveAnomaly) {
+                                          handleAnomalyClick(entry, avg, trendLegislator);
+                                        }
+                                      }}
+                                    />
+                                  );
+                                })}
+                              </Bar>
+                              <Line 
+                                yAxisId="right" 
+                                type="monotone" 
+                                dataKey="alignedVotes" 
+                                stroke="#f59e0b" 
+                                strokeWidth={3} 
+                                dot={{ r: 5, strokeWidth: 2, fill: '#0f172a' }} 
+                                activeDot={{ r: 7 }} 
+                              />
+                            </ComposedChart>
+                          ) : (
+                            <ComposedChart
+                              data={comparisonData}
+                              margin={{ top: 10, right: 10, bottom: 5, left: -10 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                              <XAxis 
+                                dataKey="term" 
+                                stroke="#64748b" 
+                                fontSize={10} 
+                                fontWeight="bold"
+                                tickLine={false}
+                              />
+                              <YAxis 
+                                stroke="#818cf8" 
+                                fontSize={10} 
+                                fontWeight="medium"
+                                tickLine={false}
+                                tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
+                              />
+                              <Tooltip
+                                contentStyle={{ 
+                                  backgroundColor: '#0f172a', 
+                                  border: '1px solid #334155', 
+                                  borderRadius: '12px',
+                                  padding: '10px'
+                                }}
+                                itemStyle={{ fontSize: '11px' }}
+                                labelStyle={{ color: '#94a3b8', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
+                                formatter={(value: any, name: any) => {
+                                  const leg = comparisonLegislators.find(l => l.legislator_id === name);
+                                  return [`$${value.toLocaleString()}`, leg ? leg.name : name];
+                                }}
+                                labelFormatter={(label) => {
+                                  const matched = comparisonData.find(d => d.term === label);
+                                  return matched ? matched.fullTerm : label;
+                                }}
+                              />
+                              {comparisonLegislators.map((leg, idx) => (
+                                <Line 
+                                  key={leg.legislator_id}
+                                  type="monotone" 
+                                  dataKey={leg.legislator_id} 
+                                  stroke={chartColors[idx % chartColors.length]} 
+                                  strokeWidth={3} 
+                                  dot={{ r: 4, strokeWidth: 2, fill: '#0f172a' }} 
+                                  activeDot={{ r: 6 }} 
+                                />
+                              ))}
+                            </ComposedChart>
+                          )}
                         </ResponsiveContainer>
                       </div>
+                      {/* Anomaly Explanation Pane */}
+                      {selectedAnomaly && pacChartView === 'individual' && (
+                        <div className="mt-4 bg-slate-900 border border-indigo-900/40 rounded-xl p-4 animate-fade-in relative overflow-hidden">
+                          <div className="absolute top-0 left-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-transparent"></div>
+                          <button 
+                            onClick={() => setSelectedAnomaly(null)}
+                            className="absolute top-3 right-3 text-slate-500 hover:text-slate-300 transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                          
+                          <div className="flex items-center gap-2 mb-3">
+                            <Sparkles size={16} className={selectedAnomaly.type === 'spike' ? 'text-red-400' : 'text-emerald-400'} />
+                            <h4 className="text-xs font-black tracking-wide text-indigo-300 uppercase">
+                              AI PAC Anomaly Analysis
+                            </h4>
+                            <span className="text-[10px] text-slate-500 font-mono ml-auto mr-6">
+                              {selectedAnomaly.legislatorName} • {selectedAnomaly.fullTerm}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-950 rounded-lg p-3 border border-slate-900">
+                            <div className="flex flex-wrap items-center gap-3 mb-2 border-b border-slate-800 pb-2">
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${selectedAnomaly.type === 'spike' ? 'text-red-400 border-red-900/40 bg-red-950/30' : 'text-emerald-400 border-emerald-900/40 bg-emerald-950/30'}`}>
+                                {selectedAnomaly.type === 'spike' ? 'High Spike' : 'Low Dip'} Detected
+                              </span>
+                              <span className="text-xs font-mono text-slate-300">
+                                ${selectedAnomaly.pacFunding.toLocaleString()} vs ${Math.round(selectedAnomaly.avg).toLocaleString()} (5-Term Avg)
+                              </span>
+                            </div>
+                            
+                            {anomalyLoading ? (
+                              <div className="flex items-center gap-2 text-indigo-400 text-xs py-2">
+                                <RefreshCw size={14} className="animate-spin" />
+                                <span>Generating investigative context from historical records...</span>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-slate-300 leading-relaxed font-sans mt-2">
+                                {anomalyExplanation}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
 
                     </div>
                   </div>
                 </div>
               );
             })()}
+
+            {/* DIRECTORY & SCORECARD TAB */}
+            {dashboardTab === 'directory' && (
+              <div className="space-y-8 animate-fade-in">
 
             {/* Controls panel (Search & Filtering System) */}
             <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 space-y-5">
@@ -3025,8 +3501,38 @@ export default function App() {
                   <SlidersHorizontal size={14} className="text-indigo-400" />
                   Congressional Representatives Index ({filteredLegislators.length} Match)
                 </h3>
-                <p className="text-xs text-slate-400 italic">Showing structured feed state</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setIsCompareMode(!isCompareMode);
+                      if (isCompareMode) setCompareSelection([]); // Clear selection when turning off
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase rounded-lg border transition-colors ${isCompareMode ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'}`}
+                  >
+                    Compare Mode
+                  </button>
+                  <p className="text-xs text-slate-400 italic">Showing structured feed state</p>
+                </div>
               </div>
+
+              {isCompareMode && (
+                <div className="mb-4 bg-indigo-950/40 border border-indigo-900/50 p-3 rounded-xl flex items-center justify-between animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <span className="text-indigo-400 font-bold text-xs">Select two legislators to compare:</span>
+                    <span className="bg-slate-900 px-2 py-0.5 rounded text-[10px] font-mono text-slate-300 border border-slate-800">
+                      {compareSelection.length} / 2 Selected
+                    </span>
+                  </div>
+                  {compareSelection.length === 2 && (
+                    <button
+                      onClick={() => setShowCompareModal(true)}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-colors"
+                    >
+                      View Comparison
+                    </button>
+                  )}
+                </div>
+              )}
 
               {filteredLegislators.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -3039,6 +3545,10 @@ export default function App() {
                       onToggleFavorite={handleToggleFavorite}
                       alignmentScore={calculateUserAlignmentScore(legislator, userPrefs)}
                       onShowBriefing={handleGenerateBriefing}
+                      onScanFindings={handleScanFindings}
+                      compareMode={isCompareMode}
+                      isSelectedForCompare={compareSelection.includes(legislator.legislator_id)}
+                      onToggleCompare={handleToggleCompare}
                     />
                   ))}
                 </div>
@@ -3055,8 +3565,9 @@ export default function App() {
                 </div>
               )}
             </div>
-
           </div>
+          )}
+        </div>
         )}
 
         {/* Tab 2: AI Legislative Watchdog Hub */}
@@ -3633,6 +4144,82 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
 
       </main>
 
+
+      {/* Committee Findings Modal Overlay */}
+      {activeFindingsLegislator && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-950/50 border border-rose-900/50 text-rose-400">
+                  <Search size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base leading-none">
+                    Ethics & Committee Findings Scan
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-mono mt-2 uppercase font-semibold tracking-wider">
+                    {activeFindingsLegislator.name} • {activeFindingsLegislator.party} {activeFindingsLegislator.role} ({activeFindingsLegislator.state})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveFindingsLegislator(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-950/50">
+              {findingsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="relative">
+                    <div className="w-12 h-12 border-4 border-rose-900/40 rounded-full"></div>
+                    <div className="w-12 h-12 border-4 border-rose-500 rounded-full border-t-transparent animate-spin absolute inset-0"></div>
+                  </div>
+                  <p className="text-sm font-bold tracking-widest uppercase text-rose-400 animate-pulse">
+                    Scanning public records & committee findings...
+                  </p>
+                  <p className="text-xs text-slate-500 font-mono">This involves AI investigation of historical controversies.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Results Panel */}
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <h4 className="text-xs font-black uppercase text-rose-400 tracking-wider mb-4 flex items-center gap-2">
+                      <ShieldAlert size={14} /> AI Investigative Report
+                    </h4>
+                    
+                    <div className="text-sm text-slate-300 leading-relaxed font-sans space-y-4">
+                      {findingsText ? (
+                         findingsText.split('\n\n').map((paragraph, i) => (
+                           <p key={i}>{paragraph}</p>
+                         ))
+                      ) : (
+                        <p className="text-slate-500 italic">No report available.</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Disclaimer */}
+                  <div className="bg-slate-950 border border-rose-900/30 rounded-xl p-4 flex items-start gap-3">
+                    <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] leading-relaxed text-slate-400 font-mono">
+                      <strong>AI SYNTHESIZED REPORT:</strong> This summary is generated dynamically by an AI agent using public records and internet history. It does not reflect a legal verdict or guarantee perfect factual accuracy. Consult primary investigative journalism or official committee publications for verified details.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* AI Legislator Briefing Modal Overlay */}
       {activeBriefingLegislator && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
@@ -4021,6 +4608,88 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
           border-radius: 4px;
         }
       `}</style>
+
+      {/* Compare Modal Overlay */}
+      {showCompareModal && compareSelection.length === 2 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950 shrink-0">
+              <h2 className="text-lg font-bold text-white tracking-wide uppercase flex items-center gap-2">
+                <SlidersHorizontal size={18} className="text-indigo-400" />
+                Head-to-Head Comparison
+              </h2>
+              <button 
+                onClick={() => setShowCompareModal(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-6 relative">
+                {/* Vertical Divider */}
+                <div className="absolute top-0 bottom-0 left-1/2 -ml-px w-px bg-slate-800"></div>
+
+                {compareSelection.map((id, index) => {
+                  const leg = legislators.find(l => l.legislator_id === id);
+                  if (!leg) return null;
+                  
+                  return (
+                    <div key={id} className={`flex flex-col gap-6 ${index === 0 ? 'pr-2' : 'pl-2'}`}>
+                      {/* Identity */}
+                      <div className="text-center space-y-1">
+                        <div className="mx-auto w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center mb-3">
+                           {leg.role === 'Senator' ? <Landmark size={24} className="text-slate-400" /> : <User size={24} className="text-slate-400" />}
+                        </div>
+                        <h3 className="text-xl font-bold text-white">{leg.name}</h3>
+                        <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{leg.role} • {leg.state} • {leg.party}</p>
+                      </div>
+
+                      {/* PAC Funding Section */}
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-850 space-y-3">
+                        <h4 className="text-[10px] font-black uppercase text-indigo-400 tracking-wider flex items-center gap-1.5 border-b border-indigo-900/40 pb-2">
+                          <Coins size={12} /> Corporate PAC Funding
+                        </h4>
+                        <div className="flex justify-between items-end">
+                          <span className="text-sm font-semibold text-slate-400">Total Pipeline</span>
+                          <span className="text-2xl font-bold text-white">${leg.aipac_funding_total.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <span className="text-sm font-semibold text-slate-400">PAC % of Total</span>
+                          <span className="text-lg font-bold text-indigo-300">{leg.pac_percentage}%</span>
+                        </div>
+                      </div>
+
+                      {/* Transparency Section */}
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-850 space-y-3">
+                        <h4 className="text-[10px] font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5 border-b border-amber-900/40 pb-2">
+                          <ShieldAlert size={12} /> Transparency & Integrity
+                        </h4>
+                        <div className="flex justify-between items-end">
+                          <span className="text-sm font-semibold text-slate-400">Conflict Alerts</span>
+                          <span className={`text-xl font-bold ${leg.conflict_triggers.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {leg.conflict_triggers.length} Active
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <span className="text-sm font-semibold text-slate-400">Secret Societies</span>
+                          <span className="text-lg font-bold text-amber-300">{leg.society_affiliations.length}</span>
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -19,7 +19,8 @@ import {
   CheckCircle2, 
   Info,
   Sparkles,
-  Star
+  Star,
+  Search
 } from 'lucide-react';
 
 interface RepresentativeCardProps {
@@ -29,6 +30,10 @@ interface RepresentativeCardProps {
   onToggleFavorite?: (id: string) => void;
   alignmentScore?: number;
   onShowBriefing?: (legislator: Legislator) => void;
+  onScanFindings?: (legislator: Legislator) => void;
+  compareMode?: boolean;
+  isSelectedForCompare?: boolean;
+  onToggleCompare?: (legislatorId: string) => void;
   key?: React.Key;
 }
 
@@ -38,7 +43,11 @@ export function RepresentativeCard({
   isFavorite = false, 
   onToggleFavorite, 
   alignmentScore,
-  onShowBriefing
+  onShowBriefing,
+  onScanFindings,
+  compareMode = false,
+  isSelectedForCompare = false,
+  onToggleCompare
 }: RepresentativeCardProps) {
   const { 
     name, 
@@ -182,6 +191,16 @@ export function RepresentativeCard({
         {/* Top Header Row */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-2.5">
+            {compareMode && (
+              <div className="mr-2">
+                <input 
+                  type="checkbox" 
+                  checked={isSelectedForCompare} 
+                  onChange={() => onToggleCompare && onToggleCompare(legislator.legislator_id)}
+                  className="w-4 h-4 cursor-pointer accent-indigo-500 rounded border-slate-700 bg-slate-900"
+                />
+              </div>
+            )}
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center bg-slate-850 border border-slate-800 text-slate-300`}>
               {role === 'Senator' ? <Landmark size={18} className="text-slate-400" /> : <User size={18} className="text-slate-400" />}
             </div>
@@ -910,10 +929,21 @@ export function RepresentativeCard({
         {onShowBriefing && (
           <button
             onClick={() => onShowBriefing(legislator)}
-            className="mb-4 w-full py-2 px-3.5 bg-gradient-to-r from-slate-950/60 to-slate-900/60 hover:from-indigo-950/40 hover:to-indigo-900/40 border border-slate-800 hover:border-indigo-800/60 rounded-xl text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm font-mono tracking-wide"
+            className="mb-2 w-full py-2 px-3.5 bg-gradient-to-r from-slate-950/60 to-slate-900/60 hover:from-indigo-950/40 hover:to-indigo-900/40 border border-slate-800 hover:border-indigo-800/60 rounded-xl text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm font-mono tracking-wide"
           >
             <Sparkles size={11} className="text-indigo-400 animate-pulse" />
             <span>GENERATE AI BRIEFING</span>
+          </button>
+        )}
+
+        {/* Committee Findings Scanner Button */}
+        {onScanFindings && (
+          <button
+            onClick={() => onScanFindings(legislator)}
+            className="mb-4 w-full py-2 px-3.5 bg-gradient-to-r from-slate-950/60 to-slate-900/60 hover:from-rose-950/40 hover:to-rose-900/40 border border-slate-800 hover:border-rose-800/60 rounded-xl text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm font-mono tracking-wide"
+          >
+            <Search size={11} className="text-rose-400" />
+            <span>SCAN ETHICS FINDINGS</span>
           </button>
         )}
       </div>

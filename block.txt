@@ -1,0 +1,11 @@
+                    Clear Filter Constraints
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* Tab 2: AI Legislative Watchdog Hub */}
+        {activeTab === 'watchdog' && (

@@ -423,11 +423,6 @@ async function startServer() {
       }
 
       const ai = getGeminiClient();
-      const promptHistory = history && Array.isArray(history) ? history.map((h: any) => ({
-        role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.text }]
-      })) : [];
-
       const systemInstruction = `You are "Civic Guide", a friendly, highly intelligent onboarding assistant and civic advisor for the Legislative Watchdog & Congressional Transparency Aggregator.
       Your job is to help users navigate the app and understand congressional integrity data.
       
@@ -441,14 +436,25 @@ async function startServer() {
       
       Keep your responses helpful, scannable, and encouraging. Focus on guide-rail help, making sure the user never feels lost. Format with clean markdown bolding and lists.`;
 
-      const contents = promptHistory.map((item: any) => ({
-        role: item.role === 'model' ? 'model' : 'user',
-        parts: [{ text: item.text }]
-      }));
-      contents.push({
-        role: 'user',
-        parts: [{ text: message }]
-      });
+      const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+      if (history && Array.isArray(history)) {
+        for (const h of history) {
+          if (h && typeof h.text === 'string' && h.text.trim()) {
+            contents.push({
+              role: h.role === 'user' ? 'user' : 'model',
+              parts: [{ text: h.text.trim() }]
+            });
+          }
+        }
+      }
+
+      if (message && typeof message === 'string' && message.trim()) {
+        contents.push({
+          role: 'user',
+          parts: [{ text: message.trim() }]
+        });
+      }
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
@@ -812,6 +818,26 @@ async function startServer() {
 
   // Pre-seeded local government county officials database
   const preseededCountyOfficials: Record<string, CountyOfficial[]> = {
+
+    "el_dorado_ca": [
+      {
+        id: "eld-1",
+        name: "Jeff Leikauf",
+        role: "County Sheriff",
+        party: "Non-Partisan",
+        integrityScore: 65,
+        rating: "C",
+        salary: 185000,
+        tenure: "Current Term",
+        conflicts: ["Former Sheriff John D'Agostini, who endorsed him and helped him win the election, has publicly demanded his resignation citing 'buyer's remorse' and policy disagreements."],
+        contributions: [
+          { donor: "El Dorado County Deputy Sheriff's Association", amount: 15000, category: "Union Lobbying" },
+          { donor: "Former Sheriff Support PAC", amount: 10000, category: "Individual/PAC" }
+        ],
+        recentActions: ["Publicly stated he will not resign and intends to fulfill his elected term.", "Managing department amidst intense political pressure from predecessor."]
+      }
+    ],
+
     "maricopa_az": [
       {
         id: "mco-1",
@@ -1011,6 +1037,24 @@ async function startServer() {
 
   // Pre-seeded active watchdog local corruption and civil rights complaints
   let localComplaintsDb: LocalComplaint[] = [
+
+    {
+      id: "comp-eld-1",
+      county: "El Dorado County",
+      state: "California",
+      title: "Sheriff Succession Dispute and Department Instability",
+      category: "Corruption",
+      description: "The current Sheriff is being asked to step down by the former Sheriff who heavily campaigned to help him win the election. This highly public political dispute over leadership direction has raised concerns about departmental stability and the influence of predecessors on elected officials.",
+      evidenceDescription: "Public letters and local news coverage of former Sheriff D'Agostini demanding Sheriff Leikauf's resignation.",
+      status: "Public Exposed",
+      dateSubmitted: "2026-08-18",
+      reporterNotes: [
+        "Verified public demands for resignation. Sheriff Leikauf confirmed he will remain in office."
+      ],
+      upvotes: 112,
+      submittedBy: "NorCal Civic Observer"
+    },
+
     {
       id: "comp-1",
       county: "Maricopa County",
