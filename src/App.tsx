@@ -40,7 +40,8 @@ import {
   Send,
   Building2,
   Users,
-  Bot
+  Bot,
+  CheckCircle
 } from 'lucide-react';
 import { CONGRESSIONAL_DATA } from './data';
 import { RepresentativeCard } from './components/RepresentativeCard';
@@ -48,7 +49,7 @@ import { LocalAuditHub } from './components/LocalAuditHub';
 import { ScriptViewer } from './components/ScriptViewer';
 import { JsonViewer } from './components/JsonViewer';
 import { ReactNativeExporter } from './components/ReactNativeExporter';
-import { Legislator, WatchdogBill, WatchdogAnalysis, UserValuePreferences, UserProfile, DebatePost, DebateChallenge, LawmakerBroadcast, LegislativeMilestone } from './types';
+import { Legislator, BackgroundTask, WatchdogBill, WatchdogAnalysis, UserValuePreferences, UserProfile, DebatePost, DebateChallenge, LawmakerBroadcast, LegislativeMilestone } from './types';
 import { CustomFlagsPanel, CustomFlag } from './components/CustomFlagsPanel';
 import { AccountPanel } from './components/AccountPanel';
 import { CivicArena } from './components/CivicArena';
@@ -148,7 +149,211 @@ interface NotificationAlert {
 }
 
 export default function App() {
+  // Background Task Manager State
+  const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
+  const [showTaskNotifications, setShowTaskNotifications] = useState(true);
+
+  const addBackgroundTask = (task: Omit<BackgroundTask, 'id' | 'status' | 'createdAt'>): string | null => {
+    // We only use the functional update form if we don't need to return conditionally based on state. 
+    // Wait, to safely check limit, we can just check `backgroundTasks` from scope, but better to check in a ref or just use state.
+    // For simplicity, checking from current render scope is usually fine if they click one by one.
+    if (backgroundTasks.filter(t => t.status === 'running').length >= 4) {
+      alert("Maximum of 4 background tasks are currently running. Please wait for them to finish.");
+      return null;
+    }
+    const id = Math.random().toString(36).substring(7);
+    setBackgroundTasks(prev => [...prev, { ...task, id, status: 'running', createdAt: Date.now() }]);
+    return id;
+  };
+
+  const updateBackgroundTask = (id: string, updates: Partial<BackgroundTask>) => {
+    setBackgroundTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+  
+  const removeBackgroundTask = (id: string) => {
+    setBackgroundTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+
+  // Reconstructed Missing Logic
+  const calculateTransparencyIndex = (leg: Legislator) => {
+    let score = leg.transparency_score;
+    if (leg.outreach_status === 'verified') score += 15;
+    if (leg.ethics_flags > 0) score -= leg.ethics_flags * 5;
+    return Math.max(0, Math.min(100, score));
+  };
+
+  const formatMoney = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+  };
+
+  const uniqueSocieties = Array.from(new Set(legislators.map(l => l.secret_society_affiliations).flat())).filter(Boolean);
+
+  const handleResetFilters = () => {
+    setSearch('');
+    // reset other filters if any
+  };
+
+  const handleToggleCompare = (id: string) => {
+    setCompareSelection(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
+
+  const filteredLegislators = legislators.filter(leg => {
+    if (search && !leg.name.toLowerCase().includes(search.toLowerCase()) && !leg.state.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const stats = {
+    totalPacMoney: filteredLegislators.reduce((sum, leg) => sum + leg.total_pac_money, 0),
+    avgTransparency: filteredLegislators.length > 0 ? filteredLegislators.reduce((sum, leg) => sum + leg.transparency_score, 0) / filteredLegislators.length : 0,
+    totalFlags: filteredLegislators.reduce((sum, leg) => sum + leg.ethics_flags, 0),
+    avgCorporate: filteredLegislators.length > 0 ? filteredLegislators.reduce((sum, leg) => sum + leg.corporate_backing_pct, 0) / filteredLegislators.length : 0
+  };
+
+  const handleSummarizeBill = async (billNumber: string, title: string, text: string) => {
+    const taskId = addBackgroundTask({
+      type: 'bill_summary',
+      title: `Bill Summary: ${billNumber}`,
+      data: { bill: currentViewingBill || { billNumber, title, fullText: text } }
+    });
+    if (!taskId) return;
+    
+    try {
+      const response = await fetch("/api/watchdog/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billNumber, title, billText: text }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      updateBackgroundTask(taskId, { status: 'complete', result: data.summary });
+    } catch (err) {
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to summarize bill." });
+    }
+  };
+
+  const handleAskCustomQuestion = async (billNumber: string, title: string, text: string, questionText: string) => {
+    if (!questionText.trim()) return;
+    setCustomQuestion("");
+    const taskId = addBackgroundTask({
+      type: 'bill_question',
+      title: `Bill Q&A: ${questionText.substring(0,20)}...`,
+      data: { bill: currentViewingBill || { billNumber, title, fullText: text }, summary: viewingBillSummary, question: questionText }
+    });
+    if (!taskId) return;
+
+    try {
+      const response = await fetch("/api/watchdog/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billNumber, title, billText: text, summary: viewingBillSummary, question: questionText }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      updateBackgroundTask(taskId, { status: 'complete', result: data.answer });
+    } catch (err) {
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to answer question." });
+    }
+  };
+
+  const handleExecuteWatchdogAnalysis = async () => {
+    const activeRules = activeFlags.filter(f => f.active).map(f => f.ruleContext).join("\n");
+    if (!activeRules) return alert("Please activate at least one flag.");
+    const taskId = addBackgroundTask({
+      type: 'watchdog',
+      title: 'Watchdog Analysis'
+    });
+    if (!taskId) return;
+
+    try {
+      const response = await fetch('/api/gemini/watchdog-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billData: currentViewingBill, customRules: activeRules })
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      updateBackgroundTask(taskId, { status: 'complete', result: data.analysis });
+    } catch (err) {
+      updateBackgroundTask(taskId, { status: 'error', error: "Watchdog analysis failed." });
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'dashboard' | 'watchdog' | 'flags' | 'script' | 'functions' | 'expo' | 'json' | 'debate' | 'press' | 'credentials'>('dashboard');
+
+  // Upcoming Major Legislative Milestones (Current Congressional Session)
+  const legislativeMilestones: LegislativeMilestone[] = [
+    {
+      id: 'milestone-1',
+      date: 'May 15, 2026',
+      title: 'Spring Appropriations Initial Markup',
+      status: 'passed',
+      riskLevel: 'medium',
+      riskLabel: 'Moderate Lobbying',
+      iconType: 'calendar',
+      description: 'Initial drafts for sub-committee appropriations bills on agricultural and interior budgets were filed.',
+      citizenAction: 'Audit completed. AIPAC and pesticide manufacturer lobby contributions spiked by 18% during this markup period.'
+    },
+    {
+      id: 'milestone-2',
+      date: 'July 31, 2026',
+      title: 'Summer Recess Adjournment & PAC Push',
+      status: 'current',
+      riskLevel: 'high',
+      riskLabel: 'High Fundraising Risk',
+      iconType: 'money',
+      description: 'Members adjourn for August recess. Historical records show 35% of annual dark money & corporate PAC fundraiser events occur during this period.',
+      citizenAction: 'Constituent Task: Monitor local district town halls. Ask representatives to sign the voluntary 72-Hour Bill Review Pledge before the fall session.'
+    },
+    {
+      id: 'milestone-3',
+      date: 'September 15, 2026',
+      title: 'FY 2027 Budget Reconciliation Deadline',
+      status: 'upcoming',
+      riskLevel: 'high',
+      riskLabel: 'Severe Late-Night Votes',
+      iconType: 'alert',
+      description: 'Oversight committees must finalize reconciliation language. Highly vulnerable to 1,000+ page omnibus dumps with zero-review clauses.',
+      citizenAction: 'Watchdog Alert: Scraper script will run 24/7 scanning for fast-track lobbyist copy-paste exemptions inside tax subclauses.'
+    },
+    {
+      id: 'milestone-4',
+      date: 'October 1, 2026',
+      title: 'Fiscal Year 2027 Budget Enactment',
+      status: 'upcoming',
+      riskLevel: 'medium',
+      riskLabel: 'Shutdown/Fast-Track Risk',
+      iconType: 'vote',
+      description: 'Deadline to pass full budget or continuing resolution. High probability of pre-midnight fast-tracked emergency floor votes.',
+      citizenAction: 'Action Plan: Demand public live-streaming of all emergency rules committee adjustments convened with under 4 hours notice.'
+    },
+    {
+      id: 'milestone-5',
+      date: 'November 3, 2026',
+      title: 'Midterm Congressional Elections',
+      status: 'upcoming',
+      riskLevel: 'high',
+      riskLabel: 'Voter Accountability Freeze',
+      iconType: 'flag',
+      description: 'General election polls close. Watchdog scorecard indices are frozen for public voter reference at polling places.',
+      citizenAction: 'Voter Action: Compare your candidates on our Lobbying Alignment and Bill Diligence scorecards before casting your ballot.'
+    }
+  ];
+
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('milestone-2');
+  const isGeneratingMilestonePlan = backgroundTasks.some(t => t.type === 'milestone' && t.status === 'running');
+  const [customMilestonePlan, setCustomMilestonePlan] = useState<string>('');
+
+  const activeMilestoneRef = useRef<HTMLDivElement | null>(null);
+
+
+
+
+
   const [dashboardTab, setDashboardTab] = useState<'directory' | 'scorecard' | 'metrics' | 'pac' | 'events' | 'advisor'>('directory');
   
   // Custom Watchdog Transparency Flags (User Configurable)
@@ -374,17 +579,20 @@ export default function App() {
   // AI Legislator Briefing States
   const [activeBriefingLegislator, setActiveBriefingLegislator] = useState<any | null>(null);
   const [briefingText, setBriefingText] = useState<string | null>(null);
-  const [briefingLoading, setBriefingLoading] = useState(false);
+  const briefingLoading = backgroundTasks.some(t => t.type === 'briefing' && t.status === 'running');
 
   // Committee Findings Agent States
   const [activeFindingsLegislator, setActiveFindingsLegislator] = useState<any | null>(null);
   const [findingsText, setFindingsText] = useState<string | null>(null);
-  const [findingsLoading, setFindingsLoading] = useState(false);
+  const findingsLoading = backgroundTasks.some(t => t.type === 'findings' && t.status === 'running');
 
   const handleScanFindings = async (legislator: any) => {
-    setActiveFindingsLegislator(legislator);
-    setFindingsText(null);
-    setFindingsLoading(true);
+    const taskId = addBackgroundTask({
+      type: 'findings',
+      title: `Ethics Scan: ${legislator.name}`,
+      data: { legislator }
+    });
+    if (!taskId) return;
 
     try {
       const res = await fetch("/api/gemini/committee-findings", {
@@ -399,12 +607,10 @@ export default function App() {
         }),
       });
       const data = await res.json();
-      setFindingsText(data.findings || "No findings generated.");
+      updateBackgroundTask(taskId, { status: 'complete', result: data.findings || "No findings generated." });
     } catch (error) {
       console.error(error);
-      setFindingsText("Failed to retrieve committee findings. Please try again later.");
-    } finally {
-      setFindingsLoading(false);
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to retrieve committee findings. Please try again later." });
     }
   };
 
@@ -447,9 +653,12 @@ export default function App() {
 
   // Generate Legislator Briefing
   const handleGenerateBriefing = async (legislator: any) => {
-    setActiveBriefingLegislator(legislator);
-    setBriefingText(null);
-    setBriefingLoading(true);
+    const taskId = addBackgroundTask({
+      type: 'briefing',
+      title: `AI Briefing: ${legislator.name}`,
+      data: { legislator }
+    });
+    if (!taskId) return;
 
     try {
       const response = await fetch('/api/gemini/legislator-briefing', {
@@ -463,79 +672,12 @@ export default function App() {
       }
 
       const data = await response.json();
-      setBriefingText(data.briefing || 'No briefing generated.');
+      updateBackgroundTask(taskId, { status: 'complete', result: data.briefing || 'No briefing generated.' });
     } catch (err: any) {
       console.error(err);
-      setBriefingText('⚠️ An error occurred while generating the AI Integrity Briefing. Please verify your settings or retry.');
-    } finally {
-      setBriefingLoading(false);
+      updateBackgroundTask(taskId, { status: 'error', error: '⚠️ An error occurred while generating the AI Integrity Briefing.' });
     }
   };
-
-  // Upcoming Major Legislative Milestones (Current Congressional Session)
-  const legislativeMilestones: LegislativeMilestone[] = [
-    {
-      id: 'milestone-1',
-      date: 'May 15, 2026',
-      title: 'Spring Appropriations Initial Markup',
-      status: 'passed',
-      riskLevel: 'medium',
-      riskLabel: 'Moderate Lobbying',
-      iconType: 'calendar',
-      description: 'Initial drafts for sub-committee appropriations bills on agricultural and interior budgets were filed.',
-      citizenAction: 'Audit completed. AIPAC and pesticide manufacturer lobby contributions spiked by 18% during this markup period.'
-    },
-    {
-      id: 'milestone-2',
-      date: 'July 31, 2026',
-      title: 'Summer Recess Adjournment & PAC Push',
-      status: 'current',
-      riskLevel: 'high',
-      riskLabel: 'High Fundraising Risk',
-      iconType: 'money',
-      description: 'Members adjourn for August recess. Historical records show 35% of annual dark money & corporate PAC fundraiser events occur during this period.',
-      citizenAction: 'Constituent Task: Monitor local district town halls. Ask representatives to sign the voluntary 72-Hour Bill Review Pledge before the fall session.'
-    },
-    {
-      id: 'milestone-3',
-      date: 'September 15, 2026',
-      title: 'FY 2027 Budget Reconciliation Deadline',
-      status: 'upcoming',
-      riskLevel: 'high',
-      riskLabel: 'Severe Late-Night Votes',
-      iconType: 'alert',
-      description: 'Oversight committees must finalize reconciliation language. Highly vulnerable to 1,000+ page omnibus dumps with zero-review clauses.',
-      citizenAction: 'Watchdog Alert: Scraper script will run 24/7 scanning for fast-track lobbyist copy-paste exemptions inside tax subclauses.'
-    },
-    {
-      id: 'milestone-4',
-      date: 'October 1, 2026',
-      title: 'Fiscal Year 2027 Budget Enactment',
-      status: 'upcoming',
-      riskLevel: 'medium',
-      riskLabel: 'Shutdown/Fast-Track Risk',
-      iconType: 'vote',
-      description: 'Deadline to pass full budget or continuing resolution. High probability of pre-midnight fast-tracked emergency floor votes.',
-      citizenAction: 'Action Plan: Demand public live-streaming of all emergency rules committee adjustments convened with under 4 hours notice.'
-    },
-    {
-      id: 'milestone-5',
-      date: 'November 3, 2026',
-      title: 'Midterm Congressional Elections',
-      status: 'upcoming',
-      riskLevel: 'high',
-      riskLabel: 'Voter Accountability Freeze',
-      iconType: 'flag',
-      description: 'General election polls close. Watchdog scorecard indices are frozen for public voter reference at polling places.',
-      citizenAction: 'Voter Action: Compare your candidates on our Lobbying Alignment and Bill Diligence scorecards before casting your ballot.'
-    }
-  ];
-
-  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('milestone-2');
-  const [isGeneratingMilestonePlan, setIsGeneratingMilestonePlan] = useState<boolean>(false);
-  const [customMilestonePlan, setCustomMilestonePlan] = useState<string>('');
-
-  const activeMilestoneRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToCurrentMilestone = (behavior: ScrollBehavior = 'smooth') => {
     if (activeMilestoneRef.current) {
@@ -692,17 +834,15 @@ export default function App() {
 
     setOutreachStatusLog({
       status: 'dispatching',
-      text: `Representative ${leg.name}'s staff is validating token & signing cryptographic declaration...`
+      text: `Representative ${leg.name}'s staff is validating token & preparing statement...`
     });
 
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    let statement = `As a public servant, I take citizen concerns regarding special-interest lobbying and session timing seriously. While campaign contributions and tight scheduling can make legislative transparency difficult, I pledge to implement strict standards in my office.`;
-    let correctiveActions = [
-      "Co-sponsor the bipartisan 72-Hour Mandated Bill Review Act.",
-      "Restrict and cap corporate PAC contributions during the current committee term.",
-      "Initiate a monthly constituent-led transparency review livestream."
-    ];
+    const taskId = addBackgroundTask({
+      type: 'rebuttal',
+      title: `Generate Rebuttal: ${leg.name}`,
+      data: { legislatorId }
+    });
+    if (!taskId) return;
 
     try {
       const response = await fetch('/api/gemini/generate-rebuttal', {
@@ -714,65 +854,29 @@ export default function App() {
           customActions: customRedressActions 
         })
       });
+
       if (response.ok) {
         const data = await response.json();
-        statement = data.statement;
-        correctiveActions = data.correctiveActions;
+        updateBackgroundTask(taskId, { status: 'complete', result: data });
+      } else {
+        throw new Error("Failed to generate rebuttal");
       }
     } catch (err) {
-      console.error("Failed to generate custom rebuttal with Gemini", err);
+      console.error(err);
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to generate AI rebuttal." });
     }
-
-    setLegislators(prev => {
-      const updated = prev.map(l => {
-        if (l.legislator_id === legislatorId) {
-          return {
-            ...l,
-            outreach_status: 'verified',
-            verified_member_page: true,
-            official_statement: statement,
-            corrective_actions: correctiveActions
-          };
-        }
-        return l;
-      });
-      try {
-        localStorage.setItem('watchdog_legislators', JSON.stringify(updated));
-      } catch (e) {
-        console.error(e);
-      }
-      return updated;
-    });
-
-    setCustomRedressStatement('');
-    setCustomRedressActions('');
-
-    setOutreachStatusLog({
-      status: 'sent',
-      text: `🎉 Official portal response published successfully! Representative ${leg.name} is now a VERIFIED member with redress statements visible to the public.`
-    });
-
-    // Append an event to the Live Event feed
-    const newEvent: WatchdogEvent = {
-      id: `event-verified-${Date.now()}`,
-      title: `Official Response Published: ${leg.name}`,
-      category: 'OUTREACH',
-      summary: `${leg.name} (${leg.party}) has officially claimed their page, submitted an oversight rebuttal, and filed 3 corrective commitments.`,
-      impactText: "Verified checkmark awarded. Voter transparency ratings recalculated with corrective action weightings.",
-      severity: "info",
-      timestamp: "Just Now",
-      targetLegislatorId: leg.legislator_id,
-      actionLabel: "Filter Directory"
-    };
-    setCurrentEvents(prev => [newEvent, ...prev]);
   };
 
   const handleGenerateMilestonePlan = async (milestoneId: string) => {
     const milestone = legislativeMilestones.find(m => m.id === milestoneId);
     if (!milestone) return;
 
-    setIsGeneratingMilestonePlan(true);
-    setCustomMilestonePlan('');
+    const taskId = addBackgroundTask({
+      type: 'milestone',
+      title: `Action Plan: ${milestone.title}`,
+      data: { milestoneId }
+    });
+    if (!taskId) return;
 
     try {
       const response = await fetch('/api/gemini/generate-milestone-plan', {
@@ -782,15 +886,13 @@ export default function App() {
       });
       if (response.ok) {
         const data = await response.json();
-        setCustomMilestonePlan(data.plan);
+        updateBackgroundTask(taskId, { status: 'complete', result: data.plan });
       } else {
         throw new Error('Failed to generate milestone plan');
       }
     } catch (err) {
       console.error(err);
-      setCustomMilestonePlan('⚠️ Could not generate plan. Please check your connection and try again.');
-    } finally {
-      setIsGeneratingMilestonePlan(false);
+      updateBackgroundTask(taskId, { status: 'error', error: '⚠️ Could not generate plan.' });
     }
   };
 
@@ -1102,14 +1204,14 @@ export default function App() {
   const [customReleaseTime, setCustomReleaseTime] = useState("2026-07-01T08:00:00");
   const [customVoteTime, setCustomVoteTime] = useState("2026-07-02T14:00:00"); // 30 hours elapsed
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const isAnalyzing = backgroundTasks.some(t => t.type === 'watchdog' && t.status === 'running');
   const [analysisProgress, setAnalysisProgress] = useState<string[]>([]);
   const [analysisResult, setAnalysisResult] = useState<WatchdogAnalysis | null>(null);
 
   // Bill Reader & AI Summarizer State
   const [isViewingBill, setIsViewingBill] = useState(false);
   const [viewingBillId, setViewingBillId] = useState<string | null>(null);
-  const [isSummarizingBill, setIsSummarizingBill] = useState(false);
+  const isSummarizingBill = backgroundTasks.some(t => t.type === 'bill_summary' && t.status === 'running');
   const [viewingBillSummary, setViewingBillSummary] = useState<{
     executiveSummary: string;
     keyProvisions: string[];
@@ -1117,7 +1219,7 @@ export default function App() {
     usingDemoFallback?: boolean;
   } | null>(null);
   const [customQuestion, setCustomQuestion] = useState("");
-  const [isQueryingQuestion, setIsQueryingQuestion] = useState(false);
+  const isQueryingQuestion = backgroundTasks.some(t => t.type === 'bill_question' && t.status === 'running');
   const [customQuestionReplies, setCustomQuestionReplies] = useState<Array<{
     question: string;
     reply: string;
@@ -1143,20 +1245,28 @@ export default function App() {
     legislatorName: string;
   } | null>(null);
   const [anomalyExplanation, setAnomalyExplanation] = useState<string | null>(null);
-  const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const anomalyLoading = backgroundTasks.some(t => t.type === 'anomaly' && t.status === 'running');
 
   const handleAnomalyClick = async (entry: any, avg: number, legislator: Legislator) => {
     const type = entry.pacFunding > avg ? 'spike' : 'dip';
-    setSelectedAnomaly({
-      term: entry.term,
-      fullTerm: entry.fullTerm,
-      pacFunding: entry.pacFunding,
-      avg,
-      type,
-      legislatorName: legislator.name
+    
+    // We add to background tasks, and we don't open the pane immediately. We wait.
+    const taskId = addBackgroundTask({
+      type: 'anomaly',
+      title: `PAC Anomaly Analysis: ${legislator.name}`,
+      data: { 
+        legislatorId: legislator.legislator_id,
+        type,
+        anomalyArgs: {
+          term: entry.term,
+          fullTerm: entry.fullTerm,
+          pacFunding: entry.pacFunding,
+          avg,
+          legislatorName: legislator.name
+        }
+      }
     });
-    setAnomalyExplanation(null);
-    setAnomalyLoading(true);
+    if (!taskId) return;
 
     try {
       const res = await fetch("/api/gemini/pac-anomaly-explanation", {
@@ -1173,12 +1283,10 @@ export default function App() {
         })
       });
       const data = await res.json();
-      setAnomalyExplanation(data.explanation || "No explanation returned.");
+      updateBackgroundTask(taskId, { status: 'complete', result: data.explanation || "No explanation returned." });
     } catch (err) {
       console.error(err);
-      setAnomalyExplanation("Failed to generate AI analysis of this funding anomaly. Please try again later.");
-    } finally {
-      setAnomalyLoading(false);
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to generate AI analysis of this funding anomaly. Please try again later." });
     }
   };
   const [partyFilter, setPartyFilter] = useState<'All' | 'Democrat' | 'Republican' | 'Independent'>('All');
@@ -1192,490 +1300,105 @@ export default function App() {
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
 
-  const handleToggleCompare = (legislatorId: string) => {
-    setCompareSelection(prev => {
-      if (prev.includes(legislatorId)) {
-        return prev.filter(id => id !== legislatorId);
-      }
-      if (prev.length < 2) {
-        return [...prev, legislatorId];
-      }
-      return prev;
-    });
-  };
-
-  // Helper to calculate Factual Legislative Transparency Index (0 to 100)
-  const calculateTransparencyIndex = (legislator: Legislator): number => {
-    const f1 = Math.max(0, 100 - (legislator.late_night_votes_count * 15));
-    const f2 = Math.min(100, Math.round((legislator.avg_review_hours_major_bills / 72) * 100));
-    const f3 = Math.min(100, legislator.transparency_bill_sponsorships * 25);
-    return Math.round((f1 * 0.4) + (f2 * 0.4) + (f3 * 0.2));
-  };
-
-  const currentViewingBill = useMemo(() => {
-    if (!isViewingBill || !viewingBillId) return null;
-    if (viewingBillId === 'custom') {
-      return {
-        id: "custom",
-        billNumber: customBillNumber,
-        title: customBillTitle,
-        pageCount: Number(customBillPages) || 1,
-        summaryText: customBillText,
-        fullText: customBillText || "No text fragment provided. Type or paste legislative text on the left form to preview it."
-      };
-    }
-    const preloaded = PRELOADED_BILLS.find(b => b.id === viewingBillId);
-    if (!preloaded) return null;
-
-    let draftText = "";
-    if (viewingBillId === 'bill-1') {
-      draftText = `H.R. 2670\n118th CONGRESS\n1st Session\n\nTo authorize appropriations for fiscal year 2024 for military activities of the Department of Defense, for military construction, and for defense activities of the Department of Energy, to prescribe military personnel strengths for such fiscal year, and for other purposes.\n\nIN THE HOUSE OF REPRESENTATIVES\n\nBe it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,\n\nSECTION 1. SHORT TITLE; TABLE OF CONTENTS.\n(a) Short Title.—This Act may be cited as the “National Defense Authorization Act for Fiscal Year 2024”.\n\nSECTION 2. ORGANIZATION OF ACT INTO DIVISIONS.\n(a) Divisions.—This Act is organized into four divisions as follows:\n  (1) Division A—Department of Defense Authorizations.\n  (2) Division B—Military Construction Authorizations.\n  (3) Division C—Department of Energy National Security Authorizations.\n  (4) Division D—Funding Tables.\n\nSEC. 101. AUTHORIZATION OF APPROPRIATIONS.\nFunds are hereby authorized to be appropriated for fiscal year 2024 for the use of the Armed Forces and other activities and agencies of the Department of Defense for expenses, not otherwise provided for, for procurement, research, development, test and evaluation, and operation and maintenance, as specified in the funding tables in division D.\n\nSEC. 312. PROCUREMENT OF COMMODITIES WITH CORPORATE SELF-AUDITING OUTSOURCING.\nThe Secretary of Defense shall establish a specialized defense contractor certification pathway, allowing approved commercial suppliers of technology components to conduct compliance self-auditing routines, bypassing standard federal safety and pricing inspections.\n\nSEC. 805. MODIFICATION OF DEFENSE ACQUISITION REPORTING PROCESSES.\nRequirements for detailed cost oversight reports for major system procurements exceeding $500M are hereby repealed. Contractors may present simplified financial statements in lieu of auditing compliance audits.`;
-    } else if (viewingBillId === 'bill-2') {
-      draftText = `H.R. 1\n115th CONGRESS\n1st Session\n\nTo provide for reconciliation pursuant to titles II and V of the concurrent resolution on the budget for fiscal year 2018.\n\nIN THE HOUSE OF REPRESENTATIVES\n\nBe it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,\n\nSECTION 1. SHORT TITLE.\n(a) Short Title.—This Act may be cited as the “Tax Cuts and Jobs Act”.\n\nSEC. 11011. REDUCTION IN CORPORATE TAX RATE.\n(a) In General.—Section 11(b) of the Internal Revenue Code of 1986 is amended to read as follows:\n  “(b) Amount Of Tax.—The amount of the tax imposed by subsection (a) on a corporation shall be 21 percent of the taxable income.”\n\nSEC. 11012. INCREASE IN STANDARD DEDUCTION.\n(a) In General.—Section 63(c)(2) of the Internal Revenue Code of 1986 is amended—\n  (1) by striking ‘$3,000’ and inserting ‘$12,000’,\n  (2) by striking ‘$4,400’ and inserting ‘$18,000’, and\n  (3) by striking ‘$6,000’ and inserting ‘$24,000’.\n\nSEC. 13001. REPEAL OF AFFORDABLE CARE ACT INDIVIDUAL MANDATE PENALTY.\n(a) In General.—Section 5000A(c) is amended—\n  (1) in paragraph (2)(B)(iii), by striking ‘2.5 percent’ and inserting ‘0 percent’,\n  (2) in paragraph (3)(A), by striking ‘$695’ and inserting ‘$0’.`;
-    } else if (viewingBillId === 'bill-3') {
-      draftText = `S. 3746\n118th CONGRESS\n1st Session\n\nTo suspend the debt limit, reduce discretionary spending, and expand certain work requirements for federal assistance programs.\n\nIN THE SENATE OF THE UNITED STATES\n\nBe it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,\n\nSECTION 1. SHORT TITLE.\n(a) Short Title.—This Act may be cited as the “Fiscal Responsibility Act of 2023”.\n\nSEC. 101. TEMPORARY SUSPENSION OF DEBT LIMIT.\n(a) In General.—Section 3101(b) of title 31, United States Code, shall not apply for the period beginning on the date of the enactment of this Act and ending on January 2, 2025.\n\nSEC. 201. CAPS ON DISCRETIONARY BUDGET SPENDING.\n(a) Discretionary Spending Limits.—Except as provided in subsection (b), total discretionary budget authority for fiscal year 2024 shall be capped at $1.59 trillion, and for fiscal year 2025 shall be capped at $1.61 trillion.\n\nSEC. 311. MODIFICATION OF WORK REQUIREMENTS FOR SNAP.\n(a) In General.—Section 6(o)(2) of the Food and Nutrition Act of 2008 is amended by striking ‘50 years of age’ and inserting ‘54 years of age’.`;
-    }
-
-    return {
-      ...preloaded,
-      fullText: draftText
-    };
-  }, [isViewingBill, viewingBillId, customBillNumber, customBillTitle, customBillPages, customBillText]);
-
-  // Reset all filters
-  const handleResetFilters = () => {
-    setSearch('');
-    setPartyFilter('All');
-    setRoleFilter('All');
-    setSocietyFilter('All');
-    setIntegrityFilter('All');
-    setSortBy('highest_pac');
-  };
-
-  // Extract unique societies in the dataset
-  const uniqueSocieties = useMemo(() => {
-    const societies = new Set<string>();
-    legislators.forEach(item => {
-      item.society_affiliations.forEach(soc => societies.add(soc));
-    });
-    return Array.from(societies).sort();
-  }, [legislators]);
-
-  // Filtered and Sorted list
-  const filteredLegislators = useMemo(() => {
-    let result = [...legislators];
-
-    // Filter by search text
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        item => 
-          item.name.toLowerCase().includes(q) || 
-          item.state.toLowerCase().includes(q) ||
-          item.legislator_id.toLowerCase().includes(q)
-      );
-    }
-
-    // Filter by party
-    if (partyFilter !== 'All') {
-      result = result.filter(item => item.party === partyFilter);
-    }
-
-    // Filter by role (Representative/Senator)
-    if (roleFilter !== 'All') {
-      result = result.filter(item => item.role === roleFilter);
-    }
-
-    // Filter by specific secret society
-    if (societyFilter !== 'All') {
-      result = result.filter(item => item.society_affiliations.includes(societyFilter));
-    }
-
-    // Filter by integrity alert type
-    if (integrityFilter !== 'All') {
-      if (integrityFilter === 'clean') {
-        result = result.filter(item => !item.conflict_triggers || item.conflict_triggers.length === 0);
-      } else {
-        result = result.filter(item => item.conflict_triggers && item.conflict_triggers.some(t => t.type === integrityFilter));
-      }
-    }
-
-    // Sorting
-    result.sort((a, b) => {
-      if (sortBy === 'highest_pac') {
-        return b.aipac_funding_total - a.aipac_funding_total;
-      }
-      if (sortBy === 'lowest_pac') {
-        return a.aipac_funding_total - b.aipac_funding_total;
-      }
-      if (sortBy === 'highest_transparency') {
-        return calculateTransparencyIndex(b) - calculateTransparencyIndex(a);
-      }
-      if (sortBy === 'lowest_transparency') {
-        return calculateTransparencyIndex(a) - calculateTransparencyIndex(b);
-      }
-      if (sortBy === 'society_count') {
-        return b.society_affiliations.length - a.society_affiliations.length;
-      }
-      if (sortBy === 'highest_alerts') {
-        const getAlertCount = (x: Legislator) => x.conflict_triggers ? x.conflict_triggers.length : 0;
-        return getAlertCount(b) - getAlertCount(a);
-      }
-      if (sortBy === 'highest_alignment') {
-        return calculateUserAlignmentScore(b, userPrefs) - calculateUserAlignmentScore(a, userPrefs);
-      }
-      if (sortBy === 'lowest_alignment') {
-        return calculateUserAlignmentScore(a, userPrefs) - calculateUserAlignmentScore(b, userPrefs);
-      }
-      return 0;
-    });
-
-    return result;
-  }, [legislators, search, partyFilter, roleFilter, societyFilter, integrityFilter, sortBy, userPrefs]);
-
-  // Aggregate stats from the current filtered list
-  const stats = useMemo(() => {
-    const totalAipac = filteredLegislators.reduce((acc, curr) => acc + curr.aipac_funding_total, 0);
-    const avgTransparencyScore = filteredLegislators.length > 0
-      ? Math.round(filteredLegislators.reduce((acc, curr) => acc + calculateTransparencyIndex(curr), 0) / filteredLegislators.length)
-      : 0;
-    const societyMembersCount = filteredLegislators.filter(item => item.society_affiliations.length > 0).length;
-    const midnightVotesActiveCount = filteredLegislators.filter(item => item.midnight_vote_badge).length;
-    const totalIntegrityAlerts = filteredLegislators.reduce((acc, curr) => acc + (curr.conflict_triggers ? curr.conflict_triggers.length : 0), 0);
-
-    return {
-      totalAipac,
-      avgTransparencyScore,
-      societyMembersCount,
-      midnightVotesActiveCount,
-      totalIntegrityAlerts,
-      legislatorCount: filteredLegislators.length
-    };
-  }, [filteredLegislators]);
-
-  // Format helper for money
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Simulate Midnight Vote Event
-  const handleSimulateMidnightVote = () => {
-    // Pick a random politician from our state
-    const targetIdx = Math.floor(Math.random() * legislators.length);
-    const targetRep = legislators[targetIdx];
-
-    // Pick a random non-standard time
-    const midnightHours = ["10:15 PM", "11:42 PM", "01:20 AM", "02:45 AM", "03:55 AM", "04:10 AM"];
-    const randomTime = midnightHours[Math.floor(Math.random() * midnightHours.length)];
-
-    // Pick a bill
-    const bills = ["HR 2670", "HR 1", "S 3746", "HR 82", "HR 302"];
-    const randomBill = bills[Math.floor(Math.random() * bills.length)];
-
-    const timestampFull = `${randomTime} EST`;
-    const msg = `[${targetRep.name}] cast a vote on [${randomBill}] at [${timestampFull}], which is outside of standard transparency hours.`;
-
-    const newAlert: NotificationAlert = {
-      id: `alert-${Date.now()}`,
-      politicianName: targetRep.name,
-      billNumber: randomBill,
-      timestamp: timestampFull,
-      fullMessage: msg
-    };
-
-    // Update alerts lists
-    setAlerts(prev => [newAlert, ...prev].slice(0, 10)); // Limit to 10 logs
-    setToastAlert(newAlert);
-
-    // Update specific legislator's record in state to trigger live badge immediately
-    setLegislators(prev => prev.map((item, idx) => {
-      if (idx === targetIdx) {
-        const existingVotes = item.midnight_votes || [];
-        return {
-          ...item,
-          midnight_vote_badge: true,
-          midnight_votes: [
-            {
-              bill_number: randomBill,
-              bill_name: "Congressional Decision Act",
-              timestamp: randomTime
-            },
-            ...existingVotes
-          ]
-        };
-      }
-      return item;
-    }));
-
-    // Auto dismiss Toast Alert after 6 seconds
-    setTimeout(() => {
-      setToastAlert(curr => curr?.id === newAlert.id ? null : curr);
-    }, 6050);
-  };
-
-  // Simulate Integrity Trigger Event
-  const handleSimulateIntegrityTrigger = (type: 'donor_contract' | 'insider_trading' | 'lobbyist_favoritism' | 'secret_litigation') => {
-    // Pick a random politician
-    const targetIdx = Math.floor(Math.random() * legislators.length);
-    const targetRep = legislators[targetIdx];
-
-    let title = "";
-    let severity: 'medium' | 'high' | 'critical' = 'high';
-    let description = "";
-    let details: any = {};
-    const randomDate = new Date().toISOString().split('T')[0];
-
-    if (type === 'donor_contract') {
-      title = "Donor-Contract Award Correlation";
-      severity = "high";
-      const donors = ["Boeing Corp PAC", "Lockheed Martin PAC", "Pfizer PAC", "ExxonMobil Corp", "Goldman Sachs"];
-      const randomDonor = donors[Math.floor(Math.random() * donors.length)];
-      const contractVal = (Math.floor(Math.random() * 80) + 5) * 1000000;
-      description = `Major campaign donor "${randomDonor}" subsidiary was awarded a federal procurement contract worth $${(contractVal / 1000000).toFixed(1)}M shortly after floor support by the Legislator.`;
-      details = {
-        donor_or_entity: randomDonor,
-        contract_value: contractVal
-      };
-    } else if (type === 'insider_trading') {
-      title = "Stock Transaction Prior to Vote";
-      severity = "critical";
-      const stocks = [
-        { ticker: "MSFT (Microsoft)", sector: "AI Cloud" },
-        { ticker: "LMT (Lockheed Martin)", sector: "Defense" },
-        { ticker: "PFE (Pfizer)", sector: "Biotech" },
-        { ticker: "XOM (ExxonMobil)", sector: "Energy" },
-        { ticker: "NVDA (NVIDIA Corp)", sector: "Semiconductors" }
-      ];
-      const selectedStock = stocks[Math.floor(Math.random() * stocks.length)];
-      const bills = ["H.R. 5202 - Defense Supply Authorization", "H.R. 1102 - Semiconductor Grant Funding", "S. 855 - Medical Device Fast-track Act", "S. 2099 - Clean Energy Infrastructure"];
-      const randomBill = bills[Math.floor(Math.random() * bills.length)];
-      const randomAmount = ["$15,001 - $50,000", "$50,001 - $100,000", "$100,001 - $250,000"][Math.floor(Math.random() * 3)];
-      description = `Legislator or direct spouse executed a high-value "${selectedStock.ticker}" stock transaction valued at ${randomAmount} within 7 days before voting on ${randomBill.split(' - ')[0]} affecting the ${selectedStock.sector} sector.`;
-      details = {
-        stock_ticker: selectedStock.ticker,
-        transaction_type: "Buy",
-        transaction_amount: randomAmount,
-        bill_affected: randomBill
-      };
-    } else if (type === 'lobbyist_favoritism') {
-      title = "Lobbyist Text Favoritism Alert";
-      severity = "medium";
-      const firms = ["Akin Gump lobbyist", "BGR Group representative", "Brownstein Hyatt lobbyist", "Podesta Group adviser"];
-      const randomFirm = firms[Math.floor(Math.random() * firms.length)];
-      const bills = ["H.R. 3020 - Telecom Modernization Act", "S. 1403 - Financial Market Derigidification Act", "H.R. 822 - Natural Gas Extraction Act"];
-      const randomBill = bills[Math.floor(Math.random() * bills.length)];
-      description = `Verbatim textual match flagged between amendments sponsored by Legislator and model legislative text provided directly by "${randomFirm}".`;
-      details = {
-        lobbyist_firm: randomFirm,
-        bill_affected: randomBill
-      };
-    } else if (type === 'secret_litigation') {
-      title = "Secret Litigation & Notice Bypass";
-      severity = "critical";
-      const times = ["11:30 PM EST", "01:15 AM EST", "03:40 AM EST", "04:55 AM EST"];
-      const randomTime = times[Math.floor(Math.random() * times.length)];
-      const bills = ["H.R. 6112 - Omnibus Security Appropriations", "H.R. 9088 - Digital Asset Emergency Act", "S. 3442 - Emergency Bank Reserve Act"];
-      const randomBill = bills[Math.floor(Math.random() * bills.length)];
-      description = `Co-signed or voted to pass legislation directly affecting voter tax/regulatory frameworks in a closed-door session at ${randomTime}, with zero notice or public assembly.`;
-      details = {
-        secret_vote_time: randomTime,
-        bill_affected: randomBill
-      };
-    }
-
-    const msg = `[INTEGRITY ALERT] ${targetRep.name} flagged for "${title}" on ${details.bill_affected ? details.bill_affected.split(' - ')[0] : 'recent action'}.`;
-
-    const newAlert: NotificationAlert = {
-      id: `alert-${Date.now()}`,
-      politicianName: targetRep.name,
-      billNumber: details.bill_affected ? details.bill_affected.split(' - ')[0] : "Litigation",
-      timestamp: `${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-      fullMessage: msg
-    };
-
-    // Update alerts list
-    setAlerts(prev => [newAlert, ...prev].slice(0, 10));
-    setToastAlert(newAlert);
-
-    // Update specific legislator in state list
-    setLegislators(prev => prev.map((item, idx) => {
-      if (idx === targetIdx) {
-        const existingTriggers = item.conflict_triggers || [];
-        const newTrigger = {
-          id: `trig-${Date.now()}`,
-          type,
-          title,
-          severity,
-          description,
-          date: randomDate,
-          details
-        };
-        return {
-          ...item,
-          conflict_triggers: [newTrigger, ...existingTriggers]
-        };
-      }
-      return item;
-    }));
-
-    // Auto dismiss Toast Alert after 6 seconds
-    setTimeout(() => {
-      setToastAlert(curr => curr?.id === newAlert.id ? null : curr);
-    }, 6000);
-  };
-
-  // Run Watchdog AI Analysis via Full-stack route
-  const handleExecuteWatchdogAnalysis = async () => {
-    setIsAnalyzing(true);
-    setAnalysisResult(null);
-    setAnalysisProgress(["[INFO] Parsing bill parameters and timeline..."]);
-
-    // Simulated terminal timing
-    const steps = [
-      { text: "[INFO] Validating transparency parameters (Threshold: Pages >= 100 OR Elapsed <= 48h)...", delay: 600 },
-      { text: "[INFO] Contacting full-stack server pipeline at /api/watchdog/analyze...", delay: 1300 },
-      { text: "[INFO] Requesting structured JSON analysis with Google Gemini (gemini-3.5-flash)...", delay: 2000 },
-      { text: "[INFO] Generating critical summary logs focusing on special-interest benefits & late pork...", delay: 2800 },
-    ];
-
-    steps.forEach((step) => {
-      setTimeout(() => {
-        setAnalysisProgress(prev => [...prev, step.text]);
-      }, step.delay);
-    });
-
-    let requestBody = {};
-    if (isCustomBill) {
-      requestBody = {
-        billNumber: customBillNumber,
-        title: customBillTitle,
-        pageCount: Number(customBillPages) || 1,
-        textReleaseTime: new Date(customReleaseTime).toISOString(),
-        scheduledVoteTime: new Date(customVoteTime).toISOString(),
-        customText: customBillText
-      };
-    } else {
-      const preloaded = PRELOADED_BILLS.find(b => b.id === selectedBillId);
-      if (preloaded) {
-        requestBody = {
-          billNumber: preloaded.billNumber,
-          title: preloaded.title,
-          pageCount: preloaded.pageCount,
-          textReleaseTime: preloaded.textReleaseTime,
-          scheduledVoteTime: preloaded.scheduledVoteTime,
-          customText: preloaded.summaryText
-        };
-      }
-    }
-
-    try {
-      const response = await fetch("/api/watchdog/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      setTimeout(() => {
-        setAnalysisProgress(prev => [...prev, "[SUCCESS] Full analysis completed successfully.", "[INFO] Structuring output variables."]);
-        setAnalysisResult(data.analysis);
-        setIsAnalyzing(false);
-      }, 3500);
-
-    } catch (err: any) {
-      console.error(err);
-      setTimeout(() => {
-        setAnalysisProgress(prev => [...prev, `[ERROR] Analysis failed: ${err.message || "Unknown Error"}`]);
-        setIsAnalyzing(false);
-      }, 3500);
-    }
-  };
-
-  const handleSummarizeBill = async (billNumber: string, title: string, text: string) => {
-    setIsSummarizingBill(true);
-    setViewingBillSummary(null);
-    try {
-      const response = await fetch("/api/watchdog/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billNumber, title, billText: text }),
-      });
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-      const data = await response.json();
-      setViewingBillSummary(data.summary);
-    } catch (err: any) {
-      console.error("Failed to summarize bill", err);
-      setViewingBillSummary({
-        executiveSummary: "The automated AI summarization pipeline was unable to complete the request. Please verify connection configurations or API keys.",
-        keyProvisions: [
-          "Failed to retrieve key provisions.",
-          "Check backend connection logs."
-        ],
-        citizenImpact: "Connection issues prevent structural analysis.",
-        usingDemoFallback: true
-      });
-    } finally {
-      setIsSummarizingBill(false);
-    }
-  };
-
-  const handleAskCustomQuestion = async (billNumber: string, title: string, text: string, questionText: string) => {
-    if (!questionText.trim()) return;
-    setIsQueryingQuestion(true);
+  const handleOpenTaskResult = (task: BackgroundTask) => {
+    if (task.status !== 'complete') return;
     
-    // Optimistically add question to chat with empty response or loading state
-    const newQuestionObj = {
-      question: questionText,
-      reply: "Thinking... parsing legislative content clauses...",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      loading: true
-    };
+    // Dispatch to the correct view based on task type
+    switch (task.type) {
+      case 'briefing':
+        setActiveBriefingLegislator(task.data.legislator);
+        setBriefingText(task.result);
+        break;
+      case 'findings':
+        setActiveFindingsLegislator(task.data.legislator);
+        setFindingsText(task.result);
+        break;
+      case 'watchdog':
+        setAnalysisResult(task.result);
+        setAnalysisProgress(["[SUCCESS] Analysis completed."]);
+        setActiveTab('watchdog');
+        break;
+      case 'anomaly':
+        setSelectedAnomaly({
+          ...task.data.anomalyArgs,
+          type: task.data.type
+        });
+        setAnomalyExplanation(task.result);
+        setPacChartView('individual');
+        setTrendLegislatorId(task.data.legislatorId);
+        setDashboardTab('pac');
+        break;
+      case 'bill_summary':
+        setViewingBillId(task.data.bill.id || 'custom');
+        setViewingBillSummary(task.result);
+        setCustomQuestionReplies([]);
+        setIsViewingBill(true);
+        break;
+      case 'bill_question':
+        setViewingBillId(task.data.bill.id || 'custom');
+        setViewingBillSummary(task.data.summary);
+        setCustomQuestionReplies(prev => [
+          ...prev, 
+          { question: task.data.question, reply: task.result, usingDemoFallback: false, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+        ]);
+        setIsViewingBill(true);
+        break;
+      case 'rebuttal':
+        const legId = task.data.legislatorId;
+        const result = task.result;
+        setLegislators(prev => {
+          const updated = prev.map(l => {
+            if (l.legislator_id === legId) {
+              return {
+                ...l,
+                outreach_status: 'verified' as const,
+                redress_statement: result.statement,
+                redress_actions: result.correctiveActions
+              };
+            }
+            return l;
+          });
+          try {
+            localStorage.setItem('watchdog_legislators', JSON.stringify(updated));
+          } catch (e) {
+            console.error(e);
+          }
+          return updated;
+        });
 
-    try {
-      const response = await fetch("/api/watchdog/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billNumber, title, billText: text, question: questionText }),
-      });
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-      const data = await response.json();
-      setCustomQuestionReplies(prev => [
-        ...prev,
-        {
-          question: questionText,
-          reply: data.reply,
-          usingDemoFallback: data.usingDemoFallback,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        setCustomRedressStatement('');
+        setCustomRedressActions('');
+
+        const leg = legislators.find(l => l.legislator_id === legId);
+        if (leg) {
+          setOutreachStatusLog({
+            status: 'sent',
+            text: `🎉 Official portal response published successfully! Representative ${leg.name} is now a VERIFIED member with redress statements visible to the public.`
+          });
+          
+          const newEvent = {
+            id: `event-verified-${Date.now()}`,
+            title: `Official Response Published: ${leg.name}`,
+            category: 'OUTREACH' as const,
+            summary: `${leg.name} (${leg.party}) has officially claimed their page, submitted an oversight rebuttal, and filed 3 corrective commitments.`,
+            impactText: "Verified checkmark awarded. Voter transparency ratings recalculated with corrective action weightings.",
+            severity: "info" as const,
+            timestamp: "Just Now",
+            targetLegislatorId: leg.legislator_id,
+            actionLabel: "Filter Directory"
+          };
+          setCurrentEvents(prev => [newEvent, ...prev]);
         }
-      ]);
-      setCustomQuestion("");
-    } catch (err: any) {
-      console.error("Failed to ask custom question", err);
-      setCustomQuestionReplies(prev => [
-        ...prev,
-        {
-          question: questionText,
-          reply: `Error: Unable to analyze question. ${err.message || "Please check backend connection."}`,
-          usingDemoFallback: true,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-    } finally {
-      setIsQueryingQuestion(false);
+        break;
+      case 'milestone':
+        setSelectedMilestoneId(task.data.milestoneId);
+        setCustomMilestonePlan(task.result);
+        setDashboardTab('events');
+        break;
     }
+    
+    // Remove task after opening
+    removeBackgroundTask(task.id);
   };
 
   return (
@@ -4687,6 +4410,63 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+
+      {/* Background Task Manager */}
+      {showTaskNotifications && backgroundTasks.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-[60] w-80 space-y-3 pointer-events-none">
+          {backgroundTasks.map(task => (
+            <div 
+              key={task.id} 
+              className={`p-4 rounded-xl shadow-2xl border pointer-events-auto transition-all animate-fade-in ${
+                task.status === 'running' ? 'bg-slate-900 border-indigo-500/50' : 
+                task.status === 'complete' ? 'bg-slate-900 border-emerald-500/50 cursor-pointer hover:bg-slate-800' :
+                'bg-slate-900 border-rose-500/50'
+              }`}
+              onClick={() => {
+                if (task.status === 'complete') {
+                  handleOpenTaskResult(task);
+                }
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  {task.status === 'running' ? (
+                    <RefreshCw size={16} className="text-indigo-400 animate-spin shrink-0" />
+                  ) : task.status === 'complete' ? (
+                    <CheckCircle size={16} className="text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertTriangle size={16} className="text-rose-400 shrink-0" />
+                  )}
+                  <div>
+                    <h4 className="text-xs font-bold text-white mb-0.5">{task.title}</h4>
+                    <p className={`text-[10px] font-mono ${
+                      task.status === 'running' ? 'text-indigo-300' : 
+                      task.status === 'complete' ? 'text-emerald-300' :
+                      'text-rose-300'
+                    }`}>
+                      {task.status === 'running' ? 'Processing in background...' : 
+                       task.status === 'complete' ? 'Click to view results' :
+                       task.error}
+                    </p>
+                  </div>
+                </div>
+                {(task.status === 'complete' || task.status === 'error') && (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeBackgroundTask(task.id);
+                    }}
+                    className="text-slate-500 hover:text-white transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
