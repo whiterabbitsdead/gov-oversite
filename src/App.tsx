@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  Search, 
+  ArrowLeft, Grid, Search, 
   Terminal, 
   FileJson, 
   Smartphone, 
@@ -41,7 +41,8 @@ import {
   Building2,
   Users,
   Bot,
-  CheckCircle
+  CheckCircle,
+  Download
 } from 'lucide-react';
 import { CONGRESSIONAL_DATA } from './data';
 import { RepresentativeCard } from './components/RepresentativeCard';
@@ -54,6 +55,9 @@ import { CustomFlagsPanel, CustomFlag } from './components/CustomFlagsPanel';
 import { AccountPanel } from './components/AccountPanel';
 import { CivicArena } from './components/CivicArena';
 import { PressRoom } from './components/PressRoom';
+import { AnimatedScore } from './components/AnimatedScore';
+import { CivicLeaderboard } from './components/CivicLeaderboard';
+
 import { PRELOADED_DEBATES, PRELOADED_BROADCASTS } from './debateData';
 import {
   ResponsiveContainer,
@@ -148,6 +152,29 @@ interface NotificationAlert {
   fullMessage: string;
 }
 
+const HighlightedBillText = ({ text }: { text: string }) => {
+  if (!text) return null;
+  const keywords = ['lobbyist', 'subclause', 'omnibus', 'liability shield'];
+  const regex = new RegExp(`(${keywords.join('|')})`, 'gi');
+  
+  const parts = text.split(regex);
+  
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (keywords.some(k => k.toLowerCase() === part.toLowerCase())) {
+          return (
+            <span key={i} className="bg-rose-950/60 text-rose-300 border border-rose-900/40 rounded px-1 py-0.5 font-bold mx-0.5">
+              {part}
+            </span>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+};
+
 export default function App() {
   // Background Task Manager State
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
@@ -175,115 +202,7 @@ export default function App() {
   };
 
 
-  // Reconstructed Missing Logic
-  const calculateTransparencyIndex = (leg: Legislator) => {
-    let score = leg.transparency_score;
-    if (leg.outreach_status === 'verified') score += 15;
-    if (leg.ethics_flags > 0) score -= leg.ethics_flags * 5;
-    return Math.max(0, Math.min(100, score));
-  };
-
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
-  };
-
-  const uniqueSocieties = Array.from(new Set(legislators.map(l => l.secret_society_affiliations).flat())).filter(Boolean);
-
-  const handleResetFilters = () => {
-    setSearch('');
-    // reset other filters if any
-  };
-
-  const handleToggleCompare = (id: string) => {
-    setCompareSelection(prev => {
-      if (prev.includes(id)) return prev.filter(x => x !== id);
-      if (prev.length >= 2) return [prev[1], id];
-      return [...prev, id];
-    });
-  };
-
-  const filteredLegislators = legislators.filter(leg => {
-    if (search && !leg.name.toLowerCase().includes(search.toLowerCase()) && !leg.state.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
-  const stats = {
-    totalPacMoney: filteredLegislators.reduce((sum, leg) => sum + leg.total_pac_money, 0),
-    avgTransparency: filteredLegislators.length > 0 ? filteredLegislators.reduce((sum, leg) => sum + leg.transparency_score, 0) / filteredLegislators.length : 0,
-    totalFlags: filteredLegislators.reduce((sum, leg) => sum + leg.ethics_flags, 0),
-    avgCorporate: filteredLegislators.length > 0 ? filteredLegislators.reduce((sum, leg) => sum + leg.corporate_backing_pct, 0) / filteredLegislators.length : 0
-  };
-
-  const handleSummarizeBill = async (billNumber: string, title: string, text: string) => {
-    const taskId = addBackgroundTask({
-      type: 'bill_summary',
-      title: `Bill Summary: ${billNumber}`,
-      data: { bill: currentViewingBill || { billNumber, title, fullText: text } }
-    });
-    if (!taskId) return;
-    
-    try {
-      const response = await fetch("/api/watchdog/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billNumber, title, billText: text }),
-      });
-      if (!response.ok) throw new Error("Failed");
-      const data = await response.json();
-      updateBackgroundTask(taskId, { status: 'complete', result: data.summary });
-    } catch (err) {
-      updateBackgroundTask(taskId, { status: 'error', error: "Failed to summarize bill." });
-    }
-  };
-
-  const handleAskCustomQuestion = async (billNumber: string, title: string, text: string, questionText: string) => {
-    if (!questionText.trim()) return;
-    setCustomQuestion("");
-    const taskId = addBackgroundTask({
-      type: 'bill_question',
-      title: `Bill Q&A: ${questionText.substring(0,20)}...`,
-      data: { bill: currentViewingBill || { billNumber, title, fullText: text }, summary: viewingBillSummary, question: questionText }
-    });
-    if (!taskId) return;
-
-    try {
-      const response = await fetch("/api/watchdog/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billNumber, title, billText: text, summary: viewingBillSummary, question: questionText }),
-      });
-      if (!response.ok) throw new Error("Failed");
-      const data = await response.json();
-      updateBackgroundTask(taskId, { status: 'complete', result: data.answer });
-    } catch (err) {
-      updateBackgroundTask(taskId, { status: 'error', error: "Failed to answer question." });
-    }
-  };
-
-  const handleExecuteWatchdogAnalysis = async () => {
-    const activeRules = activeFlags.filter(f => f.active).map(f => f.ruleContext).join("\n");
-    if (!activeRules) return alert("Please activate at least one flag.");
-    const taskId = addBackgroundTask({
-      type: 'watchdog',
-      title: 'Watchdog Analysis'
-    });
-    if (!taskId) return;
-
-    try {
-      const response = await fetch('/api/gemini/watchdog-scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ billData: currentViewingBill, customRules: activeRules })
-      });
-      if (!response.ok) throw new Error("Failed");
-      const data = await response.json();
-      updateBackgroundTask(taskId, { status: 'complete', result: data.analysis });
-    } catch (err) {
-      updateBackgroundTask(taskId, { status: 'error', error: "Watchdog analysis failed." });
-    }
-  };
-
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'watchdog' | 'flags' | 'script' | 'functions' | 'expo' | 'json' | 'debate' | 'press' | 'credentials'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'workspace' | 'dashboard' | 'localaudit' | 'watchdog' | 'flags' | 'script' | 'functions' | 'expo' | 'json' | 'debate' | 'press' | 'credentials'>('workspace');
 
   // Upcoming Major Legislative Milestones (Current Congressional Session)
   const legislativeMilestones: LegislativeMilestone[] = [
@@ -362,7 +281,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_custom_flags');
       if (saved) return JSON.parse(saved);
     } catch (e) {
-      console.error("Error reading custom flags", e);
+      console.warn("Error reading custom flags", e);
     }
     return [
       {
@@ -392,7 +311,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_legislators');
       if (saved) return JSON.parse(saved);
     } catch (e) {
-      console.error("Error reading legislators", e);
+      console.warn("Error reading legislators", e);
     }
     // Let's pre-load John Smith with a midnight vote warning to showcase it initially
     const mapped = CONGRESSIONAL_DATA.map(item => {
@@ -517,7 +436,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_alerts');
       if (saved) return JSON.parse(saved);
     } catch (e) {
-      console.error("Error reading alerts", e);
+      console.warn("Error reading alerts", e);
     }
     return [
       {
@@ -535,7 +454,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_custom_flags', JSON.stringify(customFlags));
     } catch (e) {
-      console.error("Error saving custom flags", e);
+      console.warn("Error saving custom flags", e);
     }
   }, [customFlags]);
 
@@ -543,7 +462,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_legislators', JSON.stringify(legislators));
     } catch (e) {
-      console.error("Error saving legislators", e);
+      console.warn("Error saving legislators", e);
     }
   }, [legislators]);
 
@@ -551,7 +470,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_alerts', JSON.stringify(alerts));
     } catch (e) {
-      console.error("Error saving alerts", e);
+      console.warn("Error saving alerts", e);
     }
   }, [alerts]);
 
@@ -561,7 +480,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_watchlist');
       if (saved) return JSON.parse(saved);
     } catch (e) {
-      console.error("Error reading watchlist", e);
+      console.warn("Error reading watchlist", e);
     }
     return [];
   });
@@ -609,7 +528,7 @@ export default function App() {
       const data = await res.json();
       updateBackgroundTask(taskId, { status: 'complete', result: data.findings || "No findings generated." });
     } catch (error) {
-      console.error(error);
+      console.warn(error);
       updateBackgroundTask(taskId, { status: 'error', error: "Failed to retrieve committee findings. Please try again later." });
     }
   };
@@ -644,7 +563,7 @@ export default function App() {
       const data = await response.json();
       setAdvisorHistory(prev => [...prev, { role: 'model', text: data.reply || 'No reply generated.' }]);
     } catch (err: any) {
-      console.error(err);
+      console.warn(err);
       setAdvisorHistory(prev => [...prev, { role: 'model', text: '⚠️ Unable to connect to the Civic Advisor. Please verify the backend is running and your network connection is stable.' }]);
     } finally {
       setAdvisorLoading(false);
@@ -674,9 +593,20 @@ export default function App() {
       const data = await response.json();
       updateBackgroundTask(taskId, { status: 'complete', result: data.briefing || 'No briefing generated.' });
     } catch (err: any) {
-      console.error(err);
+      console.warn(err);
       updateBackgroundTask(taskId, { status: 'error', error: '⚠️ An error occurred while generating the AI Integrity Briefing.' });
     }
+  };
+
+  const handleDownloadBriefing = () => {
+    if (!briefingText || !activeBriefingLegislator) return;
+    const blob = new Blob([briefingText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Briefing_${activeBriefingLegislator.name.replace(/\s+/g, '_')}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const scrollToCurrentMilestone = (behavior: ScrollBehavior = 'smooth') => {
@@ -695,7 +625,8 @@ export default function App() {
       const timer = setTimeout(() => {
         scrollToCurrentMilestone('smooth');
       }, 500);
-      return () => clearTimeout(timer);
+    
+  return () => clearTimeout(timer);
     }
   }, []);
 
@@ -802,7 +733,7 @@ export default function App() {
       try {
         localStorage.setItem('watchdog_legislators', JSON.stringify(updated));
       } catch (e) {
-        console.error(e);
+        console.warn(e);
       }
       return updated;
     });
@@ -862,7 +793,7 @@ export default function App() {
         throw new Error("Failed to generate rebuttal");
       }
     } catch (err) {
-      console.error(err);
+      console.warn(err);
       updateBackgroundTask(taskId, { status: 'error', error: "Failed to generate AI rebuttal." });
     }
   };
@@ -891,7 +822,7 @@ export default function App() {
         throw new Error('Failed to generate milestone plan');
       }
     } catch (err) {
-      console.error(err);
+      console.warn(err);
       updateBackgroundTask(taskId, { status: 'error', error: '⚠️ Could not generate plan.' });
     }
   };
@@ -900,7 +831,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_watchlist', JSON.stringify(watchlist));
     } catch (e) {
-      console.error("Error saving watchlist", e);
+      console.warn("Error saving watchlist", e);
     }
   }, [watchlist]);
 
@@ -910,7 +841,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_user_profile');
       return saved ? JSON.parse(saved) : null;
     } catch (e) {
-      console.error("Error reading user profile", e);
+      console.warn("Error reading user profile", e);
       return null;
     }
   });
@@ -923,7 +854,7 @@ export default function App() {
         localStorage.removeItem('watchdog_user_profile');
       }
     } catch (e) {
-      console.error("Error saving user profile", e);
+      console.warn("Error saving user profile", e);
     }
   }, [user]);
 
@@ -933,7 +864,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_debates');
       return saved ? JSON.parse(saved) : PRELOADED_DEBATES;
     } catch (e) {
-      console.error("Error reading debates", e);
+      console.warn("Error reading debates", e);
       return PRELOADED_DEBATES;
     }
   });
@@ -942,7 +873,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_debates', JSON.stringify(debates));
     } catch (e) {
-      console.error("Error saving debates", e);
+      console.warn("Error saving debates", e);
     }
   }, [debates]);
 
@@ -952,7 +883,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_broadcasts');
       return saved ? JSON.parse(saved) : PRELOADED_BROADCASTS;
     } catch (e) {
-      console.error("Error reading broadcasts", e);
+      console.warn("Error reading broadcasts", e);
       return PRELOADED_BROADCASTS;
     }
   });
@@ -961,7 +892,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_broadcasts', JSON.stringify(broadcasts));
     } catch (e) {
-      console.error("Error saving broadcasts", e);
+      console.warn("Error saving broadcasts", e);
     }
   }, [broadcasts]);
 
@@ -1053,7 +984,7 @@ export default function App() {
       const saved = localStorage.getItem('watchdog_user_prefs');
       if (saved) return JSON.parse(saved);
     } catch (e) {
-      console.error("Error reading user preferences", e);
+      console.warn("Error reading user preferences", e);
     }
     return {
       lobbyistWeight: 'high',
@@ -1067,7 +998,7 @@ export default function App() {
     try {
       localStorage.setItem('watchdog_user_prefs', JSON.stringify(userPrefs));
     } catch (e) {
-      console.error("Error saving user preferences", e);
+      console.warn("Error saving user preferences", e);
     }
   }, [userPrefs]);
 
@@ -1210,6 +1141,7 @@ export default function App() {
 
   // Bill Reader & AI Summarizer State
   const [isViewingBill, setIsViewingBill] = useState(false);
+  const [currentViewingBill, setCurrentViewingBill] = useState<any>(null);
   const [viewingBillId, setViewingBillId] = useState<string | null>(null);
   const isSummarizingBill = backgroundTasks.some(t => t.type === 'bill_summary' && t.status === 'running');
   const [viewingBillSummary, setViewingBillSummary] = useState<{
@@ -1220,7 +1152,7 @@ export default function App() {
   } | null>(null);
   const [customQuestion, setCustomQuestion] = useState("");
   const isQueryingQuestion = backgroundTasks.some(t => t.type === 'bill_question' && t.status === 'running');
-  const [customQuestionReplies, setCustomQuestionReplies] = useState<Array<{
+  const [customQuestionReplies, setViewingBillQuestions] = useState<Array<{
     question: string;
     reply: string;
     usingDemoFallback?: boolean;
@@ -1229,7 +1161,43 @@ export default function App() {
 
   // Search & Filter state
   const [search, setSearch] = useState('');
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input or textarea
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA' ||
+        document.activeElement?.tagName === 'SELECT'
+      ) {
+        return;
+      }
+      
+      if (e.key === '/') {
+        e.preventDefault();
+        document.getElementById('directory-search-input')?.focus();
+      } else if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        document.getElementById('directory-sort-select')?.focus();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const handleAddRecentSearch = (query: string) => {
+    const trimmed = query.trim();
+    if (trimmed) {
+      setRecentSearches(prev => {
+        const filtered = prev.filter(q => q.toLowerCase() !== trimmed.toLowerCase());
+        return [trimmed, ...filtered].slice(0, 5);
+      });
+    }
+  };
   const [trendLegislatorId, setTrendLegislatorId] = useState<string>('M000355');
+  const [trendTermFilter, setTrendTermFilter] = useState<string>('All');
   const [pacChartView, setPacChartView] = useState<'individual' | 'comparison'>('individual');
   const [comparisonLegislatorIds, setComparisonLegislatorIds] = useState<string[]>(['M000355', 'C001098']);
 
@@ -1285,7 +1253,7 @@ export default function App() {
       const data = await res.json();
       updateBackgroundTask(taskId, { status: 'complete', result: data.explanation || "No explanation returned." });
     } catch (err) {
-      console.error(err);
+      console.warn(err);
       updateBackgroundTask(taskId, { status: 'error', error: "Failed to generate AI analysis of this funding anomaly. Please try again later." });
     }
   };
@@ -1293,12 +1261,183 @@ export default function App() {
   const [roleFilter, setRoleFilter] = useState<'All' | 'Representative' | 'Senator'>('All');
   const [societyFilter, setSocietyFilter] = useState<string>('All');
   const [integrityFilter, setIntegrityFilter] = useState<'All' | 'donor_contract' | 'insider_trading' | 'lobbyist_favoritism' | 'secret_litigation' | 'clean'>('All');
-  const [sortBy, setSortBy] = useState<'highest_pac' | 'lowest_pac' | 'highest_transparency' | 'lowest_transparency' | 'society_count' | 'highest_alerts' | 'highest_alignment' | 'lowest_alignment'>('highest_alignment');
+  const [sortBy, setSortBy] = useState<'highest_pac' | 'lowest_pac' | 'highest_transparency' | 'lowest_transparency' | 'society_count' | 'highest_alerts' | 'highest_alignment' | 'lowest_alignment' | 'date_newest' | 'relevance'>('highest_alignment');
 
   // Compare Mode state
   const [isCompareMode, setIsCompareMode] = useState(false);
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  // Restored Missing Logic (Properly referenced)
+  const calculateTransparencyIndex = (leg: Legislator) => {
+    let score = 100 - (leg.corporate_vote_index || 0);
+    if (leg.outreach_status === 'verified') score += 15;
+    if (leg.conflict_triggers && leg.conflict_triggers.length > 0) score -= (leg.conflict_triggers.length * 10);
+    return Math.max(0, Math.min(100, score));
+  };
+
+  const formatMoney = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+  };
+
+  const uniqueSocieties = Array.from(new Set(legislators.map(l => l.society_affiliations || []).flat())).filter(Boolean);
+
+  const filteredLegislators = legislators.filter(leg => {
+    if (search && !leg.name.toLowerCase().includes(search.toLowerCase()) && !leg.state.toLowerCase().includes(search.toLowerCase()) && !leg.legislator_id.toLowerCase().includes(search.toLowerCase())) return false;
+    if (partyFilter !== 'All' && leg.party !== partyFilter) return false;
+    if (roleFilter !== 'All' && leg.role !== roleFilter) return false;
+    if (societyFilter !== 'All' && !(leg.society_affiliations || []).includes(societyFilter)) return false;
+    if (integrityFilter !== 'All') {
+      if (integrityFilter === 'clean' && (leg.conflict_triggers || []).length > 0) return false;
+      if (integrityFilter !== 'clean' && !(leg.conflict_triggers || []).some(t => t.type === integrityFilter)) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    if (sortBy === 'highest_pac') return (b.aipac_funding_total || 0) - (a.aipac_funding_total || 0);
+    if (sortBy === 'lowest_pac') return (a.aipac_funding_total || 0) - (b.aipac_funding_total || 0);
+    if (sortBy === 'highest_transparency') return calculateTransparencyIndex(b) - calculateTransparencyIndex(a);
+    if (sortBy === 'lowest_transparency') return calculateTransparencyIndex(a) - calculateTransparencyIndex(b);
+    if (sortBy === 'society_count') return (b.society_affiliations?.length || 0) - (a.society_affiliations?.length || 0);
+    if (sortBy === 'highest_alerts') return (b.conflict_triggers?.length || 0) - (a.conflict_triggers?.length || 0);
+    if (sortBy === 'highest_alignment') return (a.corporate_vote_index || 0) - (b.corporate_vote_index || 0); // lower index = higher grassroots alignment
+    if (sortBy === 'lowest_alignment') return (b.corporate_vote_index || 0) - (a.corporate_vote_index || 0);
+    if (sortBy === 'date_newest') return (b.legislator_id || '').localeCompare(a.legislator_id || ''); // Proxy for date
+    if (sortBy === 'relevance') {
+      if (search) {
+         const aName = a.name.toLowerCase().includes(search.toLowerCase());
+         const bName = b.name.toLowerCase().includes(search.toLowerCase());
+         if (aName && !bName) return -1;
+         if (!aName && bName) return 1;
+      }
+      return 0; // Default
+    }
+    return 0;
+  });
+
+  const stats = {
+    totalAipac: filteredLegislators.reduce((sum, leg) => sum + (leg.aipac_funding_total || 0), 0),
+    avgTransparencyScore: filteredLegislators.length > 0 
+      ? Math.round(filteredLegislators.reduce((sum, leg) => sum + calculateTransparencyIndex(leg), 0) / filteredLegislators.length) 
+      : 0,
+    societyMembersCount: filteredLegislators.filter(leg => leg.society_affiliations && leg.society_affiliations.length > 0).length,
+    legislatorCount: filteredLegislators.length,
+    midnightVotesActiveCount: filteredLegislators.filter(leg => leg.midnight_vote_badge).length,
+    totalIntegrityAlerts: filteredLegislators.reduce((sum, leg) => sum + (leg.conflict_triggers?.length || 0), 0)
+  };
+
+  const handleResetFilters = () => {
+    setSearch('');
+  };
+
+  const handleExportDirectoryCSV = () => {
+    // Generate CSV headers
+    const headers = ["Name", "Role", "State", "Party", "Transparency Index", "Corporate Vote Index", "Total AIPAC Funding", "Society Affiliations Count"];
+    
+    // Generate CSV rows
+    const rows = filteredLegislators.map((leg) => {
+      return [
+        `"${leg.name}"`, // Quote name to handle commas
+        `"${leg.role}"`,
+        leg.state,
+        leg.party,
+        calculateTransparencyIndex(leg),
+        leg.corporate_vote_index || 0,
+        leg.aipac_funding_total || 0,
+        (leg.society_affiliations || []).length
+      ].join(",");
+    });
+    
+    // Combine headers and rows
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    
+    // Create a Blob and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "national_oversight_legislators.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleToggleCompare = (id: string) => {
+    setCompareSelection(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
+
+  const handleSummarizeBill = async (billNumber: string, title: string, text: string) => {
+    const taskId = addBackgroundTask({
+      type: 'bill_summary',
+      title: `Bill Summary: ${billNumber}`,
+      data: { bill: currentViewingBill || { billNumber, title, fullText: text } }
+    });
+    if (!taskId) return;
+    
+    try {
+      const response = await fetch("/api/watchdog/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billNumber, title, billText: text }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      updateBackgroundTask(taskId, { status: 'complete', result: data.summary });
+    } catch (err) {
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to summarize bill." });
+    }
+  };
+
+  const handleAskCustomQuestion = async (billNumber: string, title: string, text: string, questionText: string) => {
+    if (!questionText.trim()) return;
+    setCustomQuestion("");
+    const taskId = addBackgroundTask({
+      type: 'bill_question',
+      title: `Bill Q&A: ${questionText.substring(0,20)}...`,
+      data: { bill: currentViewingBill || { billNumber, title, fullText: text }, summary: viewingBillSummary, question: questionText }
+    });
+    if (!taskId) return;
+
+    try {
+      const response = await fetch("/api/watchdog/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billNumber, title, billText: text, summary: viewingBillSummary, question: questionText }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      updateBackgroundTask(taskId, { status: 'complete', result: data });
+    } catch (err) {
+      updateBackgroundTask(taskId, { status: 'error', error: "Failed to answer question." });
+    }
+  };
+
+  const handleExecuteWatchdogAnalysis = async () => {
+    const activeRules = customFlags.filter(f => f.active).map(f => f.ruleContext).join("\n");
+    if (!activeRules) return alert("Please activate at least one flag.");
+    const taskId = addBackgroundTask({
+      type: 'watchdog',
+      title: 'Watchdog Analysis'
+    });
+    if (!taskId) return;
+
+    try {
+      const response = await fetch('/api/gemini/watchdog-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billData: currentViewingBill, customRules: activeRules })
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      updateBackgroundTask(taskId, { status: 'complete', result: data.analysis });
+    } catch (err) {
+      updateBackgroundTask(taskId, { status: 'error', error: "Watchdog analysis failed." });
+    }
+  };
+
+
 
   const handleOpenTaskResult = (task: BackgroundTask) => {
     if (task.status !== 'complete') return;
@@ -1329,17 +1468,22 @@ export default function App() {
         setDashboardTab('pac');
         break;
       case 'bill_summary':
-        setViewingBillId(task.data.bill.id || 'custom');
+        setCurrentViewingBill(task.data.bill);
         setViewingBillSummary(task.result);
-        setCustomQuestionReplies([]);
+        setViewingBillQuestions([]);
         setIsViewingBill(true);
         break;
       case 'bill_question':
-        setViewingBillId(task.data.bill.id || 'custom');
+        setCurrentViewingBill(task.data.bill);
         setViewingBillSummary(task.data.summary);
-        setCustomQuestionReplies(prev => [
+        setViewingBillQuestions(prev => [
           ...prev, 
-          { question: task.data.question, reply: task.result, usingDemoFallback: false, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+          { 
+            question: task.data.question, 
+            reply: task.result || task.data.result?.answer || (typeof task.result === 'object' ? task.result.answer : task.result) || 'No response',
+            usingDemoFallback: task.result?.usingDemoFallback,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
         ]);
         setIsViewingBill(true);
         break;
@@ -1351,9 +1495,9 @@ export default function App() {
             if (l.legislator_id === legId) {
               return {
                 ...l,
-                outreach_status: 'verified' as const,
-                redress_statement: result.statement,
-                redress_actions: result.correctiveActions
+                outreach_status: 'verified',
+                official_statement: result.statement,
+                corrective_actions: result.correctiveActions
               };
             }
             return l;
@@ -1361,13 +1505,13 @@ export default function App() {
           try {
             localStorage.setItem('watchdog_legislators', JSON.stringify(updated));
           } catch (e) {
-            console.error(e);
+            console.warn(e);
           }
           return updated;
         });
 
-        setCustomRedressStatement('');
-        setCustomRedressActions('');
+        setCustomRedressStatement(result.statement);
+        setCustomRedressActions(result.correctiveActions);
 
         const leg = legislators.find(l => l.legislator_id === legId);
         if (leg) {
@@ -1402,7 +1546,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200 antialiased font-sans pb-16 relative">
+    <div className="min-h-[100dvh] bg-slate-950 text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200 antialiased font-sans pb-32 sm:pb-16 relative">
       
       {/* Background radial gradients for ambient vibe */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-900/10 rounded-full blur-3xl pointer-events-none" />
@@ -1418,8 +1562,7 @@ export default function App() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-black tracking-wider text-rose-400">📱 LIVE FCM PUSH NOTIFICATION</span>
-              <button 
-                onClick={() => setToastAlert(null)}
+              <button onClick={() => setToastAlert(null)}
                 className="text-slate-500 hover:text-white transition-colors"
               >
                 <X size={14} />
@@ -1453,135 +1596,65 @@ export default function App() {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex flex-wrap items-center justify-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800/80">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'dashboard' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
+          {/* Workspace Navigation */}
+          {activeTab !== 'workspace' && (
+            <button onClick={() => setActiveTab('workspace')}
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors shadow-lg"
             >
-              <Activity size={13} />
-              <span>Dashboard</span>
+              <ArrowLeft size={14} />
+              Back to Workspace
             </button>
-
-            <button
-              onClick={() => setActiveTab('debate')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'debate' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Flame size={13} className="text-amber-500 animate-pulse" />
-              <span>Civic Arena</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('press')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'press' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Megaphone size={13} className="text-indigo-400" />
-              <span>Press Room</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('localaudit')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'localaudit' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Building2 size={13} className="text-emerald-400" />
-              <span>Local Gov Audit</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('credentials')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'credentials' ? 'bg-slate-800 text-white shadow-md border border-slate-700' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {user ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 block shrink-0 animate-pulse" />
-              ) : (
-                <User size={13} className="text-rose-400" />
-              )}
-              <span>{user ? `Voter Card (${user.voterState})` : 'Credentials'}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('watchdog')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'watchdog' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sparkles size={13} className="text-amber-400" />
-              <span>Watchdog AI Hub</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('flags')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'flags' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <ShieldAlert size={13} className="text-indigo-400" />
-              <span>Custom Watchdog Flags</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('functions')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'functions' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Code2 size={13} className="text-rose-400" />
-              <span>Cloud Functions</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('script')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'script' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Terminal size={13} />
-              <span>Termux Script</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('expo')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'expo' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Smartphone size={13} />
-              <span>Expo Mobile</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('json')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                activeTab === 'json' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <FileJson size={13} />
-              <span>JSON State</span>
-            </button>
-          </nav>
+          )}
         </div>
       </header>
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
 
+        {/* Tab 0: WORKSPACE LAUNCHER */}
+        {activeTab === 'workspace' && (
+          <div className="animate-fade-in space-y-8 mt-12">
+            <div className="text-center space-y-3 mb-12">
+              <h2 className="text-3xl font-black tracking-wider text-white">HUB MODULES</h2>
+              <p className="text-slate-400 text-sm max-w-xl mx-auto">Select a specialized application add-on to begin your session. Each module is sandboxed to provide a focused, uncluttered experience.</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+              {[
+                { id: 'dashboard', name: 'National Oversight', icon: Activity, color: 'text-indigo-400', desc: 'Congressional Lobbying & Tracking' },
+                { id: 'debate', name: 'Civic Arena', icon: Flame, color: 'text-amber-500', desc: 'Live Citizen Debates & Rebuttals' },
+                { id: 'localaudit', name: 'Local Gov Audit', icon: Building2, color: 'text-emerald-400', desc: 'County-Level Spending Transparency' },
+                { id: 'press', name: 'Press Room', icon: Megaphone, color: 'text-rose-400', desc: 'Media & Official Communications' },
+                { id: 'watchdog', name: 'Watchdog AI Hub', icon: Sparkles, color: 'text-amber-400', desc: 'AI Summarization & Analysis' },
+                { id: 'flags', name: 'Integrity Flags', icon: ShieldAlert, color: 'text-indigo-400', desc: 'Configure Integrity Alerts' },
+                { id: 'credentials', name: 'My Credentials', icon: User, color: 'text-emerald-400', desc: 'Voter Registration & Identity' },
+                { id: 'functions', name: 'Cloud Functions', icon: Code2, color: 'text-slate-400', desc: 'Developer API Tools' },
+                { id: 'script', name: 'Termux Script', icon: Terminal, color: 'text-slate-400', desc: 'Terminal Access Simulator' },
+                { id: 'expo', name: 'Expo Mobile', icon: Smartphone, color: 'text-slate-400', desc: 'React Native Exporter' },
+                { id: 'json', name: 'JSON State', icon: FileJson, color: 'text-slate-400', desc: 'Raw Application State' }
+              ].map(app => (
+                <button key={app.id} 
+                  onClick={() => setActiveTab(app.id as any)} 
+                  className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center text-center gap-4 hover:bg-slate-800/80 hover:border-slate-700 transition-all duration-300 shadow-xl group"
+                >
+                  <div className="w-16 h-16 rounded-2xl bg-slate-950 flex items-center justify-center border border-slate-800/80 group-hover:scale-110 transition-transform shadow-inner shadow-black/50">
+                    <app.icon size={28} className={app.color} />
+                  </div>
+                  <div>
+                    <h3 className="text-[13px] font-bold text-white tracking-wide">{app.name}</h3>
+                    <p className="text-[10px] text-slate-400 mt-2 font-medium leading-relaxed px-2">{app.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {/* Tab 1: Interactive Dashboard Simulator */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8 animate-fade-in">
             
                         {/* Dashboard Sub-Navigation */}
             <div className="flex flex-wrap items-center justify-center gap-2 mb-6 bg-slate-900/60 p-2 rounded-2xl border border-slate-800/80 w-full max-w-4xl mx-auto shadow-md">
-              <button
+              <button aria-label="setDashboardTab('directory')} className=`} > Membe"
                 onClick={() => setDashboardTab('directory')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'directory' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1590,7 +1663,7 @@ export default function App() {
                 <Users size={14} />
                 Members Directory
               </button>
-              <button
+              <button aria-label="setDashboardTab('scorecard')} className=`} > Watch"
                 onClick={() => setDashboardTab('scorecard')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'scorecard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1599,7 +1672,7 @@ export default function App() {
                 <SlidersHorizontal size={14} />
                 Watchlist & Scorecard
               </button>
-              <button
+              <button aria-label="setDashboardTab('metrics')} className=`} > Quick M"
                 onClick={() => setDashboardTab('metrics')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'metrics' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1608,7 +1681,7 @@ export default function App() {
                 <Activity size={14} />
                 Quick Metrics
               </button>
-              <button
+              <button aria-label="setDashboardTab('pac')} className=`} > PAC Trends"
                 onClick={() => setDashboardTab('pac')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'pac' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1617,7 +1690,7 @@ export default function App() {
                 <Coins size={14} />
                 PAC Trends
               </button>
-              <button
+              <button aria-label="setDashboardTab('events')} className=`} > Live Fee"
                 onClick={() => setDashboardTab('events')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'events' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1626,7 +1699,7 @@ export default function App() {
                 <BellRing size={14} />
                 Live Feed & Outreach
               </button>
-              <button
+              <button aria-label="setDashboardTab('advisor')} className=`} > AI Advi"
                 onClick={() => setDashboardTab('advisor')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'advisor' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1681,20 +1754,17 @@ export default function App() {
 
                   {/* Suggestions / Prompt starters to avoid feeling lost */}
                   <div className="mt-2.5 flex flex-wrap gap-1">
-                    <button 
-                      onClick={() => handleSendAdvisorMessage("How do I use this app?")}
+                    <button onClick={() => handleSendAdvisorMessage("How do I use this app?")}
                       className="text-[9px] font-bold bg-slate-950 hover:bg-slate-850 border border-slate-850 text-slate-400 hover:text-white px-2 py-1 rounded-md transition-colors"
                     >
                       💡 How to use?
                     </button>
-                    <button 
-                      onClick={() => handleSendAdvisorMessage("Explain the Transparency Index")}
+                    <button onClick={() => handleSendAdvisorMessage("Explain the Transparency Index")}
                       className="text-[9px] font-bold bg-slate-950 hover:bg-slate-850 border border-slate-850 text-slate-400 hover:text-white px-2 py-1 rounded-md transition-colors"
                     >
                       📊 Transparency Index
                     </button>
-                    <button 
-                      onClick={() => handleSendAdvisorMessage("Tell me about Mitch McConnell")}
+                    <button onClick={() => handleSendAdvisorMessage("Tell me about Mitch McConnell")}
                       className="text-[9px] font-bold bg-slate-950 hover:bg-slate-850 border border-slate-850 text-slate-400 hover:text-white px-2 py-1 rounded-md transition-colors"
                     >
                       🏛️ Mitch McConnell
@@ -1703,29 +1773,27 @@ export default function App() {
                 </div>
 
                 {/* Input box */}
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    type="text"
+                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input type="text"
                     placeholder="Ask the Civic Advisor anything..."
                     value={advisorInput}
                     onChange={(e) => setAdvisorInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendAdvisorMessage()}
-                    className="flex-1 h-8 px-2.5 rounded-lg bg-slate-950 border border-slate-850 focus:border-indigo-500/70 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none"
+                    aria-label="Civic Advisor question input"
+                    className="flex-1 h-12 px-4 rounded-xl bg-slate-950 border-2 border-slate-700 focus:border-indigo-500 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/30 transition-all"
                     disabled={advisorLoading}
                   />
-                  <button
-                    onClick={() => handleSendAdvisorMessage()}
+                  <button onClick={() => handleSendAdvisorMessage()}
                     disabled={advisorLoading || !advisorInput.trim()}
-                    className="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold tracking-wider uppercase transition-colors shrink-0 flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Send question to Civic Advisor"
+                    className="h-12 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold tracking-wider uppercase transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-indigo-500/50 shrink-0 flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Ask
+                    Ask Advisor
                   </button>
                 </div>
               </div>
-
             </div>
             )}
-
             {/* NEW: CAPITOL WATCHDOG LIVE EVENTS FEED & ELECTED OFFICIAL PORTAL */}
             {dashboardTab === 'events' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
@@ -1795,8 +1863,7 @@ export default function App() {
                               <span className="text-[9px] text-slate-500 font-mono">ID: {evt.id}</span>
                               
                               {evt.actionLabel && (
-                                <button
-                                  onClick={() => {
+                                <button onClick={() => {
                                     if (evt.actionLabel?.includes("Watchdog") || evt.actionLabel?.includes("Audit")) {
                                       setActiveTab('watchdog');
                                     } else if (evt.actionLabel?.includes("Filter") || evt.actionLabel?.includes("Directory")) {
@@ -1828,8 +1895,7 @@ export default function App() {
                       Feed source: Congressional crawler v3.4 (simulated live update frequency)
                     </span>
                     
-                    <button
-                      onClick={() => {
+                    <button onClick={() => {
                         const extraEvents: WatchdogEvent[] = [
                           {
                             id: `evt-extra-${Date.now()}-1`,
@@ -1893,8 +1959,7 @@ export default function App() {
                       </h3>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        id="btn-auto-scroll-milestone"
+                      <button id="btn-auto-scroll-milestone"
                         onClick={() => scrollToCurrentMilestone('smooth')}
                         className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider font-mono text-cyan-400 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/60 rounded-full transition-all cursor-pointer flex items-center gap-1"
                         title="Auto-scroll timeline to current active phase"
@@ -2030,8 +2095,7 @@ export default function App() {
                                       <Sparkles size={10} className="text-indigo-400" />
                                       AI Constituent Action Plan:
                                     </span>
-                                    <button 
-                                      onClick={() => setCustomMilestonePlan('')}
+                                    <button onClick={() => setCustomMilestonePlan('')}
                                       className="text-[8px] text-slate-500 hover:text-slate-400 uppercase font-mono font-bold"
                                     >
                                       Reset
@@ -2046,8 +2110,7 @@ export default function App() {
                                   <p className="text-[10px] text-slate-500 italic">
                                     Request a deep strategic audit from Gemini regarding lobbyist targets for this milestone.
                                   </p>
-                                  <button
-                                    onClick={() => handleGenerateMilestonePlan(ms.id)}
+                                  <button onClick={() => handleGenerateMilestonePlan(ms.id)}
                                     disabled={isGeneratingMilestonePlan}
                                     className="w-full py-1.5 px-3 bg-indigo-950 hover:bg-indigo-900 disabled:opacity-55 text-indigo-300 hover:text-white border border-indigo-900 hover:border-indigo-800 rounded-lg text-[10px] font-black uppercase tracking-wider font-mono transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                                   >
@@ -2098,8 +2161,7 @@ export default function App() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">
                         Select Representative for Outreach:
                       </label>
-                      <select
-                        value={outreachLegislatorId}
+                      <select value={outreachLegislatorId}
                         onChange={(e) => {
                           setOutreachLegislatorId(e.target.value);
                           setOutreachStatusLog({ status: 'idle', text: '' });
@@ -2153,8 +2215,7 @@ export default function App() {
                     {/* Step 2: Actions */}
                     {outreachLegislatorId && (
                       <div className="space-y-3 pt-2">
-                        <button
-                          onClick={() => handleDispatchOutreach(outreachLegislatorId)}
+                        <button onClick={() => handleDispatchOutreach(outreachLegislatorId)}
                           disabled={outreachStatusLog.status === 'drafting' || outreachStatusLog.status === 'dispatching'}
                           className="w-full py-2 bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
                         >
@@ -2176,15 +2237,13 @@ export default function App() {
                           </p>
 
                           <div className="space-y-2">
-                            <input
-                              type="text"
+                            <input type="text"
                               placeholder="Optional: Customize rebuttal statement (AI defaults if empty)"
                               value={customRedressStatement}
                               onChange={(e) => setCustomRedressStatement(e.target.value)}
                               className="w-full h-8 px-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-slate-200 placeholder-slate-500 focus:outline-none"
                             />
-                            <textarea
-                              placeholder="Optional: Customize corrective actions (one per line)"
+                            <textarea placeholder="Optional: Customize corrective actions (one per line)"
                               rows={2}
                               value={customRedressActions}
                               onChange={(e) => setCustomRedressActions(e.target.value)}
@@ -2192,8 +2251,7 @@ export default function App() {
                             />
                           </div>
 
-                          <button
-                            onClick={() => handleSimulateClaimAndPublish(outreachLegislatorId)}
+                          <button onClick={() => handleSimulateClaimAndPublish(outreachLegislatorId)}
                             disabled={outreachStatusLog.status === 'drafting' || outreachStatusLog.status === 'dispatching'}
                             className="w-full py-1.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-900 hover:border-cyan-800 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                           >
@@ -2297,6 +2355,12 @@ export default function App() {
               </div>
             </div>
 
+            
+            <CivicLeaderboard 
+              legislators={filteredLegislators}
+              calculateTransparencyIndex={calculateTransparencyIndex}
+            />
+
             {/* Simulated Live Alert Logs */}
             {alerts.length > 0 && (
               <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-4 space-y-3">
@@ -2305,8 +2369,7 @@ export default function App() {
                     <BellRing size={13} className="text-rose-400" />
                     Simulated FCM Notification Alert Dispatcher ({alerts.length} logs)
                   </span>
-                  <button 
-                    onClick={() => setAlerts([])}
+                  <button onClick={() => setAlerts([])}
                     className="text-[10px] font-bold text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
                   >
                     Clear Alert Logs
@@ -2389,14 +2452,13 @@ export default function App() {
                               <div className="flex items-center gap-3 shrink-0">
                                 <div className="text-right">
                                   <div className="text-xs font-black text-emerald-400 font-mono" title="Grassroots Alignment Score">
-                                    {alignment}% <span className="text-[9px] font-normal text-slate-500">align</span>
+                                    <AnimatedScore value={alignment} />% <span className="text-[9px] font-normal text-slate-500">align</span>
                                   </div>
                                   <div className="text-[9px] text-slate-500 font-medium font-mono" title="Transparency Index">
                                     T-Idx: {transp}
                                   </div>
                                 </div>
-                                <button
-                                  onClick={() => handleToggleFavorite(l.legislator_id)}
+                                <button onClick={() => handleToggleFavorite(l.legislator_id)}
                                   className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-900 transition-colors cursor-pointer"
                                   title="Remove from watchlist"
                                 >
@@ -2418,8 +2480,7 @@ export default function App() {
                 </div>
                 
                 {watchlist.length > 0 && (
-                  <button
-                    onClick={() => setWatchlist([])}
+                  <button onClick={() => setWatchlist([])}
                     className="w-full mt-4 py-1.5 bg-slate-950 hover:bg-slate-950/80 text-slate-400 hover:text-white border border-slate-850 rounded-xl text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
                   >
                     Clear Watchlist
@@ -2459,7 +2520,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button
+                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, lobbyistWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2490,7 +2551,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button
+                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, transparencyWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2521,7 +2582,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button
+                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, diligenceWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2552,7 +2613,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button
+                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, independenceWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2577,9 +2638,11 @@ export default function App() {
               const trendLegislator = legislators.find(l => l.legislator_id === trendLegislatorId) || legislators[0];
               if (!trendLegislator) return null;
               
-              const trendData = getPacFundingTrendData(trendLegislator);
-              const latestData = trendData[trendData.length - 1];
-              const earliestData = trendData[0];
+              const fullTrendData = getPacFundingTrendData(trendLegislator);
+              const trendData = trendTermFilter === 'All' ? fullTrendData : fullTrendData.filter(d => d.term === trendTermFilter);
+              
+              const latestData = trendData.length > 0 ? trendData[trendData.length - 1] : fullTrendData[fullTrendData.length - 1];
+              const earliestData = trendData.length > 0 ? trendData[0] : fullTrendData[0];
               const growthPct = earliestData.pacFunding > 0 
                 ? Math.round(((latestData.pacFunding - earliestData.pacFunding) / earliestData.pacFunding) * 100) 
                 : 150;
@@ -2610,7 +2673,7 @@ export default function App() {
                     dataPoint[leg.legislator_id] = Math.round(basePAC * stepMultiplier);
                   });
                   return dataPoint;
-                });
+                }).filter(d => trendTermFilter === 'All' ? true : d.term === trendTermFilter);
               })();
 
               const chartColors = ['#4f46e5', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#06b6d4', '#f97316', '#8b5cf6'];
@@ -2633,13 +2696,13 @@ export default function App() {
 
                     <div className="flex flex-col gap-3 lg:items-end shrink-0">
                       <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start lg:self-end">
-                        <button
+                        <button aria-label="setPacChartView('individual')} className=`} > Indi"
                           onClick={() => setPacChartView('individual')}
                           className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pacChartView === 'individual' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
                         >
                           Individual Detail
                         </button>
-                        <button
+                        <button aria-label="setPacChartView('comparison')} className=`} > Comp"
                           onClick={() => setPacChartView('comparison')}
                           className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pacChartView === 'comparison' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
                         >
@@ -2650,8 +2713,7 @@ export default function App() {
                       {pacChartView === 'individual' ? (
                         <div className="flex items-center gap-3 w-full lg:w-auto">
                           <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Select Lawmaker:</span>
-                          <select
-                            value={trendLegislatorId}
+                          <select value={trendLegislatorId}
                             onChange={(e) => setTrendLegislatorId(e.target.value)}
                             className="h-10 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors w-full lg:max-w-[240px]"
                           >
@@ -2666,8 +2728,7 @@ export default function App() {
                         <div className="flex flex-col gap-2 w-full lg:w-auto">
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Add Lawmaker:</span>
-                            <select
-                              value=""
+                            <select value=""
                               onChange={(e) => {
                                 const val = e.target.value;
                                 if (val && !comparisonLegislatorIds.includes(val)) {
@@ -2687,6 +2748,23 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* Date-range Term Selector */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto mt-3 lg:mt-0 lg:ml-4">
+                      <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Filter Term:</span>
+                      <select value={trendTermFilter}
+                        onChange={(e) => setTrendTermFilter(e.target.value)}
+                        className="h-10 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors w-full lg:w-[140px]"
+                      >
+                        <option value="All">Aggregate History</option>
+                        <option value="115th">115th Congress</option>
+                        <option value="116th">116th Congress</option>
+                        <option value="117th">117th Congress</option>
+                        <option value="118th">118th Congress</option>
+                        <option value="119th">119th Congress</option>
+                      </select>
+                    </div>
+
                   </div>
 
                   {pacChartView === 'comparison' && comparisonLegislators.length > 0 && (
@@ -2695,8 +2773,7 @@ export default function App() {
                         <div key={l.legislator_id} className="flex items-center gap-2 bg-slate-950 border border-slate-800 pl-2 pr-1 py-1 rounded-lg">
                           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: chartColors[idx % chartColors.length] }} />
                           <span className="text-xs font-semibold text-slate-300">{l.name}</span>
-                          <button 
-                            onClick={() => setComparisonLegislatorIds(comparisonLegislatorIds.filter(id => id !== l.legislator_id))}
+                          <button onClick={() => setComparisonLegislatorIds(comparisonLegislatorIds.filter(id => id !== l.legislator_id))}
                             className="text-slate-500 hover:text-red-400 ml-1 p-0.5 rounded-md hover:bg-slate-900 transition-colors"
                           >
                             <X size={12} />
@@ -2783,14 +2860,14 @@ export default function App() {
                               Corporate PAC Funding ($)
                             </span>
                             <span className="flex items-center gap-2 text-[9px] text-slate-500">
-                              <button 
+                              <button aria-label="setShowSpikes(!showSpikes)} className=`} > High Sp" 
                                 onClick={() => setShowSpikes(!showSpikes)}
                                 className={`flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-80 ${showSpikes ? 'opacity-100' : 'opacity-40 grayscale'}`}
                               >
                                 <span className="w-1.5 h-1.5 rounded bg-red-500 inline-block"></span>
                                 High Spike (&gt;35% above avg)
                               </button>
-                              <button 
+                              <button aria-label="setShowDips(!showDips)} className=`} > Low Dip (&g" 
                                 onClick={() => setShowDips(!showDips)}
                                 className={`flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-80 ${showDips ? 'opacity-100' : 'opacity-40 grayscale'}`}
                               >
@@ -2893,26 +2970,47 @@ export default function App() {
                                 domain={[0, 30]}
                               />
                               <Tooltip
-                                contentStyle={{ 
-                                  backgroundColor: '#0f172a', 
-                                  border: '1px solid #334155', 
-                                  borderRadius: '12px',
-                                  padding: '10px'
-                                }}
-                                itemStyle={{ color: '#e2e8f0', fontSize: '11px' }}
-                                labelStyle={{ color: '#94a3b8', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
-                                formatter={(value: any, name: any, props: any) => {
-                                  if (name === "pacFunding") {
-                                    return [`$${value.toLocaleString()}`, "PAC Contributions"];
+                                wrapperStyle={{ pointerEvents: 'auto' }}
+                                content={({ active, payload, label }: any) => {
+                                  if (active && payload && payload.length) {
+                                    const matched = trendData.find(d => d.term === label);
+                                    const fullTerm = matched ? matched.fullTerm : label;
+                                    const pacFunding = payload.find((p: any) => p.dataKey === "pacFunding");
+                                    const alignedVotes = payload.find((p: any) => p.dataKey === "alignedVotes");
+                                    
+                                    const fecSearchUrl = `https://www.fec.gov/data/receipts/?data_type=pac&candidate_name=${encodeURIComponent(trendLegislator.name)}`;
+
+                                    return (
+                                      <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl space-y-2 pointer-events-auto">
+                                        <p className="text-[10px] font-bold text-slate-400 mb-1">{fullTerm}</p>
+                                        
+                                        {pacFunding && (
+                                          <div className="flex flex-col gap-1">
+                                            <p className="text-xs text-slate-200 font-bold">
+                                              <span className="inline-block w-2 h-2 rounded bg-indigo-500 mr-2"></span>
+                                              PAC Contributions: <span className="text-indigo-400">${pacFunding.value.toLocaleString()}</span>
+                                            </p>
+                                            <a 
+                                              href={fecSearchUrl} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer" 
+                                              className="text-[9px] text-indigo-400 hover:text-indigo-300 underline inline-flex items-center gap-1 ml-4"
+                                            >
+                                              View OpenFEC Filings ↗
+                                            </a>
+                                          </div>
+                                        )}
+                                        
+                                        {alignedVotes && (
+                                          <p className="text-xs text-slate-200 font-bold mt-2">
+                                            <span className="inline-block w-2 h-2 rounded bg-amber-500 mr-2"></span>
+                                            Corporate Aligned Votes: <span className="text-amber-400">{alignedVotes.value} of 30 ({alignedVotes.payload?.corporatePercentage || 0}%)</span>
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
                                   }
-                                  if (name === "alignedVotes") {
-                                    return [`${value} of 30 (${props.payload.corporatePercentage}%)`, "Corporate Aligned Votes"];
-                                  }
-                                  return [value, name];
-                                }}
-                                labelFormatter={(label) => {
-                                  const matched = trendData.find(d => d.term === label);
-                                  return matched ? matched.fullTerm : label;
+                                  return null;
                                 }}
                               />
                                                             <Bar 
@@ -2986,21 +3084,42 @@ export default function App() {
                                 tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
                               />
                               <Tooltip
-                                contentStyle={{ 
-                                  backgroundColor: '#0f172a', 
-                                  border: '1px solid #334155', 
-                                  borderRadius: '12px',
-                                  padding: '10px'
-                                }}
-                                itemStyle={{ fontSize: '11px' }}
-                                labelStyle={{ color: '#94a3b8', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
-                                formatter={(value: any, name: any) => {
-                                  const leg = comparisonLegislators.find(l => l.legislator_id === name);
-                                  return [`$${value.toLocaleString()}`, leg ? leg.name : name];
-                                }}
-                                labelFormatter={(label) => {
-                                  const matched = comparisonData.find(d => d.term === label);
-                                  return matched ? matched.fullTerm : label;
+                                wrapperStyle={{ pointerEvents: 'auto' }}
+                                content={({ active, payload, label }: any) => {
+                                  if (active && payload && payload.length) {
+                                    const matched = comparisonData.find(d => d.term === label);
+                                    const fullTerm = matched ? matched.fullTerm : label;
+                                    return (
+                                      <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl space-y-2 pointer-events-auto max-w-[250px]">
+                                        <p className="text-[10px] font-bold text-slate-400 mb-2">{fullTerm}</p>
+                                        {payload.map((entry: any, index: number) => {
+                                          const leg = comparisonLegislators.find(l => l.legislator_id === entry.name);
+                                          const legName = leg ? leg.name : entry.name;
+                                          const fecSearchUrl = `https://www.fec.gov/data/receipts/?data_type=pac&candidate_name=${encodeURIComponent(legName)}`;
+                                          return (
+                                            <div key={index} className="flex flex-col gap-1 mb-1">
+                                              <p className="text-[11px] text-slate-200 font-bold flex items-center justify-between">
+                                                <span className="flex items-center gap-1.5 truncate">
+                                                  <span className="inline-block w-2 h-2 rounded shrink-0" style={{ backgroundColor: entry.color }}></span>
+                                                  <span className="truncate">{legName}</span>
+                                                </span>
+                                                <span className="ml-2 font-mono text-white">${entry.value.toLocaleString()}</span>
+                                              </p>
+                                              <a 
+                                                href={fecSearchUrl} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="text-[9px] text-slate-400 hover:text-indigo-300 underline inline-flex items-center gap-1 ml-3.5 transition-colors"
+                                              >
+                                                Verify on OpenFEC ↗
+                                              </a>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
                                 }}
                               />
                               {comparisonLegislators.map((leg, idx) => (
@@ -3022,8 +3141,7 @@ export default function App() {
                       {selectedAnomaly && pacChartView === 'individual' && (
                         <div className="mt-4 bg-slate-900 border border-indigo-900/40 rounded-xl p-4 animate-fade-in relative overflow-hidden">
                           <div className="absolute top-0 left-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-transparent"></div>
-                          <button 
-                            onClick={() => setSelectedAnomaly(null)}
+                          <button onClick={() => setSelectedAnomaly(null)}
                             className="absolute top-3 right-3 text-slate-500 hover:text-slate-300 transition-colors"
                           >
                             <X size={14} />
@@ -3075,32 +3193,137 @@ export default function App() {
               <div className="space-y-8 animate-fade-in">
 
             {/* Controls panel (Search & Filtering System) */}
-            <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 space-y-5">
+            <div id="search-controls-anchor" className="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 space-y-5">
               
               <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
                 
                 {/* Search Bar */}
-                <div className="relative flex-1">
-                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search representative or senator name, state, ID..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full h-11 pl-11 pr-4 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500/70 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all"
-                  />
+                <div className="relative flex-1 flex items-center gap-2">
+                  <div className="relative flex-1 group">
+                    <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10" aria-hidden="true" />
+                    <input 
+                      id="directory-search-input"
+                      type="text"
+                      placeholder="Search for a politician by name or state..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      onFocus={() => setSearchFocused(true)}
+                      onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddRecentSearch(search);
+                          setSearchFocused(false);
+                        }
+                      }}
+                      aria-label="Search politicians"
+                      className="relative w-full h-14 pl-12 pr-12 rounded-xl bg-slate-950 border-2 border-slate-700 focus:border-indigo-500 text-base text-white placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/30 transition-all shadow-inner z-10"
+                    />
+                    {!search && !searchFocused && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:flex items-center gap-1 opacity-50 z-10">
+                        <kbd className="font-mono text-[10px] bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-400 font-bold">/</kbd>
+                      </div>
+                    )}
+                    {search && (
+                      <button onClick={() => setSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 z-10"
+                        aria-label="Clear search text"
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
+                    
+                    {/* Autocomplete Dropdown */}
+                    {searchFocused && search.trim().length > 0 && filteredLegislators.length > 0 && (
+                      <div className="absolute left-0 top-full mt-2 w-full max-h-[300px] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-xl shadow-2xl z-50 flex flex-col p-1 animate-fade-in">
+                        {filteredLegislators.slice(0, 8).map(leg => (
+                          <button 
+                            key={leg.legislator_id}
+                            onClick={() => {
+                              setSearch(leg.name);
+                              handleAddRecentSearch(leg.name);
+                              setSearchFocused(false);
+                              
+                              // Small timeout to allow the filter state to flush and re-render the list if needed
+                              setTimeout(() => {
+                                const cardElement = document.getElementById(`card-${leg.legislator_id}`);
+                                if (cardElement) {
+                                  // Add a highlight class temporarily
+                                  cardElement.classList.add('ring-4', 'ring-indigo-500', 'ring-offset-4', 'ring-offset-slate-950');
+                                  
+                                  // Scroll into view centering it
+                                  cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  
+                                  // Remove highlight after 2 seconds
+                                  setTimeout(() => {
+                                    cardElement.classList.remove('ring-4', 'ring-indigo-500', 'ring-offset-4', 'ring-offset-slate-950');
+                                  }, 2000);
+                                }
+                              }, 100);
+                            }}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 text-left hover:bg-slate-800 rounded-lg transition-colors border-b border-slate-800/50 last:border-0 focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            aria-label={`Select ${leg.name}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* Avatar placeholder / Icon */}
+                              <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700">
+                                <span className="text-[10px] font-bold text-slate-400">{leg.party.charAt(0)}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-white">{leg.name}</span>
+                                <span className="text-xs text-slate-400 font-medium">{leg.role} - {leg.state}</span>
+                              </div>
+                            </div>
+                            {/* Badges / Extra info */}
+                            <div className="flex gap-1.5 opacity-80 sm:opacity-100">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                leg.party === 'Democrat' ? 'bg-blue-900/30 text-blue-400' :
+                                leg.party === 'Republican' ? 'bg-red-900/30 text-red-400' :
+                                'bg-slate-800 text-slate-400'
+                              }`}>{leg.party}</span>
+                              {leg.midnight_vote_badge && (
+                                <span className="px-2 py-0.5 rounded bg-amber-900/30 text-amber-400 text-[10px] font-bold">
+                                  Alert
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                        {filteredLegislators.length > 8 && (
+                          <div className="p-2 text-center text-xs text-slate-400 font-bold bg-slate-950/50 rounded-b-lg border-t border-slate-800">
+                            +{filteredLegislators.length - 8} more results. Press Search or Enter to view all.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => {
+                      handleAddRecentSearch(search);
+                      setSearchFocused(false);
+                    }}
+                    className="h-14 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                    aria-label="Submit search"
+                  >
+                    <span>Search</span>
+                  </button>
                 </div>
 
                 {/* Sort selector dropdown */}
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="text-xs text-slate-400 font-semibold flex items-center gap-1.5 whitespace-nowrap">
-                    <ArrowUpDown size={14} className="text-indigo-400" />
-                    Sort By:
-                  </span>
-                  <select
+                  <div className="flex flex-col gap-0.5">
+                    <span id="sort-by-label" className="text-sm text-slate-300 font-bold flex items-center gap-1.5 whitespace-nowrap">
+                      <ArrowUpDown size={16} className="text-indigo-400" aria-hidden="true" />
+                      Sort By:
+                    </span>
+                    <span className="text-[9px] text-slate-500 font-mono hidden sm:block">Press <kbd className="bg-slate-800 border border-slate-700 rounded px-1 text-slate-400 font-bold">s</kbd></span>
+                  </div>
+                  <select 
+                    id="directory-sort-select"
                     value={sortBy}
                     onChange={(e: any) => setSortBy(e.target.value)}
-                    className="h-11 px-4 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                    aria-label="Sort legislators directory"
+                    aria-describedby="sort-by-label"
+                    className="h-14 px-4 text-sm font-semibold rounded-xl bg-slate-950 border-2 border-slate-700 text-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/30 transition-all cursor-pointer shadow-sm"
                   >
                     <option value="highest_alignment">✨ Highest Grassroots Alignment</option>
                     <option value="lowest_alignment">⚠️ Lowest Grassroots Alignment</option>
@@ -3110,18 +3333,60 @@ export default function App() {
                     <option value="lowest_transparency">🔴 Lowest Transparency Index</option>
                     <option value="highest_alerts">🚨 Most Active Integrity Alerts</option>
                     <option value="society_count">👁️ Secret Society Members</option>
+                    <option value="date_newest">📅 Sort by Date</option>
+                    <option value="relevance">🔍 Sort by Relevance</option>
                   </select>
                 </div>
 
-                {/* Reset button */}
-                <button
-                  onClick={handleResetFilters}
-                  className="h-11 px-4 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                >
-                  <RefreshCw size={13} />
-                  <span>Reset</span>
-                </button>
+                {/* Reset and Export buttons */}
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={handleResetFilters}
+                    aria-label="Reset all search filters"
+                    className="h-14 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 text-sm font-bold text-slate-200 flex items-center justify-center gap-2 transition-colors cursor-pointer focus:outline-none focus:ring-4 focus:ring-slate-500/50"
+                  >
+                    <RefreshCw size={16} />
+                    <span>Reset Filters</span>
+                  </button>
+                  <button
+                    onClick={handleExportDirectoryCSV}
+                    aria-label="Export data to CSV"
+                    className="h-14 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 border-2 border-indigo-500 text-sm font-bold text-white flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                  >
+                    <Download size={16} />
+                    <span>Export CSV</span>
+                  </button>
+                </div>
 
+              </div>
+
+              {/* Status & Recent Searches */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
+                <div className="flex items-center gap-2">
+                  <span aria-live="polite" className="text-xs font-bold uppercase tracking-wider text-slate-400 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span className="text-indigo-400 font-black">{filteredLegislators.length}</span> {filteredLegislators.length === 1 ? 'Legislator' : 'Legislators'} Found
+                  </span>
+                </div>
+                
+                {/* Recent Searches */}
+                {recentSearches.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 animate-fade-in">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock size={12} aria-hidden="true" />
+                      Recent:
+                    </span>
+                    {recentSearches.map((query, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSearch(query)}
+                        aria-label={`Search for ${query}`}
+                        className="px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-slate-300 text-[10px] uppercase font-bold tracking-wider rounded transition-colors border border-slate-700 hover:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
+                      >
+                        {query}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Advanced filter criteria grid */}
@@ -3135,7 +3400,7 @@ export default function App() {
                   </label>
                   <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-850">
                     {(['All', 'Democrat', 'Republican', 'Independent'] as const).map((party) => (
-                      <button
+                      <button aria-label="setPartyFilter(party)} className=`} >"
                         key={party}
                         onClick={() => setPartyFilter(party)}
                         className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${
@@ -3156,8 +3421,7 @@ export default function App() {
                     <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
                     Fraternal Society Membership
                   </label>
-                  <select
-                    value={societyFilter}
+                  <select value={societyFilter}
                     onChange={(e) => setSocietyFilter(e.target.value)}
                     className="h-9 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-850 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
@@ -3178,7 +3442,7 @@ export default function App() {
                   </label>
                   <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-850">
                     {(['All', 'Representative', 'Senator'] as const).map((chamber) => (
-                      <button
+                      <button aria-label="setRoleFilter(chamber)} className=`} >"
                         key={chamber}
                         onClick={() => setRoleFilter(chamber)}
                         className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${
@@ -3199,8 +3463,7 @@ export default function App() {
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                     Integrity Alerts & Conflicts
                   </label>
-                  <select
-                    value={integrityFilter}
+                  <select value={integrityFilter}
                     onChange={(e: any) => setIntegrityFilter(e.target.value)}
                     className="h-9 px-3 text-xs font-semibold rounded-xl bg-slate-950 border border-slate-850 text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
@@ -3222,10 +3485,10 @@ export default function App() {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-white text-sm uppercase tracking-wider flex items-center gap-1.5">
                   <SlidersHorizontal size={14} className="text-indigo-400" />
-                  Congressional Representatives Index ({filteredLegislators.length} Match)
+                  Congressional Representatives Index
                 </h3>
                 <div className="flex items-center gap-3">
-                  <button
+                  <button aria-label="} className=`} > Compare Mode"
                     onClick={() => {
                       setIsCompareMode(!isCompareMode);
                       if (isCompareMode) setCompareSelection([]); // Clear selection when turning off
@@ -3247,8 +3510,7 @@ export default function App() {
                     </span>
                   </div>
                   {compareSelection.length === 2 && (
-                    <button
-                      onClick={() => setShowCompareModal(true)}
+                    <button onClick={() => setShowCompareModal(true)}
                       className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-colors"
                     >
                       View Comparison
@@ -3279,8 +3541,7 @@ export default function App() {
                 <div className="bg-slate-900 border border-slate-850 text-center py-16 px-4 rounded-2xl">
                   <p className="text-slate-400 font-medium mb-1 text-sm">No legislators found matching the filtered parameters.</p>
                   <p className="text-xs text-slate-500">Try loosening your search terms or clearing your society filters.</p>
-                  <button
-                    onClick={handleResetFilters}
+                  <button onClick={handleResetFilters}
                     className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-colors"
                   >
                     Clear Filter Constraints
@@ -3325,7 +3586,7 @@ export default function App() {
                   
                   {/* Mode Selector */}
                   <div className="grid grid-cols-2 bg-slate-950 p-1 rounded-xl border border-slate-850 mb-4">
-                    <button
+                    <button aria-label="setIsCustomBill(false)} className=`} > Preloaded B"
                       onClick={() => setIsCustomBill(false)}
                       className={`text-xs font-bold py-2 rounded-lg transition-colors ${
                         !isCustomBill ? 'bg-slate-850 text-white' : 'text-slate-400 hover:text-white'
@@ -3333,7 +3594,7 @@ export default function App() {
                     >
                       Preloaded Bills
                     </button>
-                    <button
+                    <button aria-label="setIsCustomBill(true)} className=`} > Custom Submi"
                       onClick={() => setIsCustomBill(true)}
                       className={`text-xs font-bold py-2 rounded-lg transition-colors ${
                         isCustomBill ? 'bg-slate-850 text-white' : 'text-slate-400 hover:text-white'
@@ -3382,8 +3643,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bill ID / Number</label>
-                          <input 
-                            type="text" 
+                          <input type="text" 
                             value={customBillNumber}
                             onChange={(e) => setCustomBillNumber(e.target.value)}
                             className="h-9 px-3 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -3391,8 +3651,7 @@ export default function App() {
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Page Count</label>
-                          <input 
-                            type="number" 
+                          <input type="number" 
                             value={customBillPages}
                             onChange={(e) => setCustomBillPages(e.target.value)}
                             className="h-9 px-3 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -3402,8 +3661,7 @@ export default function App() {
 
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bill Title</label>
-                        <input 
-                          type="text" 
+                        <input type="text" 
                           value={customBillTitle}
                           onChange={(e) => setCustomBillTitle(e.target.value)}
                           className="h-9 px-3 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -3413,8 +3671,7 @@ export default function App() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Text Released At</label>
-                          <input 
-                            type="datetime-local" 
+                          <input type="datetime-local" 
                             value={customReleaseTime}
                             onChange={(e) => setCustomReleaseTime(e.target.value)}
                             className="h-9 px-3 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 font-mono"
@@ -3422,8 +3679,7 @@ export default function App() {
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vote Scheduled At</label>
-                          <input 
-                            type="datetime-local" 
+                          <input type="datetime-local" 
                             value={customVoteTime}
                             onChange={(e) => setCustomVoteTime(e.target.value)}
                             className="h-9 px-3 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 font-mono"
@@ -3436,8 +3692,7 @@ export default function App() {
                           <span>Bill Text Fragment / Summary</span>
                           <span className="text-slate-500 font-medium">Context limits apply</span>
                         </label>
-                        <textarea
-                          rows={4}
+                        <textarea rows={4}
                           value={customBillText}
                           onChange={(e) => setCustomBillText(e.target.value)}
                           className="p-3 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 font-sans resize-none"
@@ -3452,7 +3707,7 @@ export default function App() {
                 <div className="pt-2 border-t border-slate-850 flex flex-col gap-2">
                   <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase font-mono">Bill Reader & Summaries</span>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
+                    <button aria-label=": PRELOADED_BILLS.find(b => b.id === selectedBillI"
                       onClick={() => {
                         const bill = isCustomBill 
                           ? { id: "custom", billNumber: customBillNumber, title: customBillTitle, summaryText: customBillText } 
@@ -3469,7 +3724,7 @@ export default function App() {
                       <span>View Draft</span>
                     </button>
 
-                    <button
+                    <button aria-label=": PRELOADED_BILLS.find(b => b.id === selectedBillI"
                       onClick={async () => {
                         const bill = isCustomBill 
                           ? { id: "custom", billNumber: customBillNumber, title: customBillTitle, summaryText: customBillText } 
@@ -3490,8 +3745,7 @@ export default function App() {
 
                 <div className="pt-1 flex flex-col gap-2">
                   <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase font-mono">Special Interest Audits</span>
-                  <button
-                    onClick={handleExecuteWatchdogAnalysis}
+                  <button onClick={handleExecuteWatchdogAnalysis}
                     disabled={isAnalyzing}
                     className="w-full py-3 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-xs font-black rounded-xl text-white flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:shadow-indigo-950/20 disabled:opacity-50 transition-all uppercase tracking-wider"
                   >
@@ -3749,7 +4003,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
   try {
     const CONGRESS_API_KEY = process.env.CONGRESS_API_KEY;
     if (!CONGRESS_API_KEY) {
-      console.error("Missing CONGRESS_API_KEY in environment variables.");
+      console.warn("Missing CONGRESS_API_KEY in environment variables.");
       return;
     }
 
@@ -3803,7 +4057,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
       await voteRef.set({ processedAt: admin.firestore.FieldValue.serverTimestamp() });
     }
   } catch (error) {
-    console.error("Transparency monitor crash:", error);
+    console.warn("Transparency monitor crash:", error);
   }
 });`}
               </div>
@@ -3870,8 +4124,8 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
 
       {/* Committee Findings Modal Overlay */}
       {activeFindingsLegislator && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[100dvh] sm:h-auto sm:max-h-[85dvh] rounded-none sm:rounded-2xl border-0 sm:border">
             
             {/* Header */}
             <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950">
@@ -3888,8 +4142,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setActiveFindingsLegislator(null)}
+              <button onClick={() => setActiveFindingsLegislator(null)}
                 className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
               >
                 <X size={16} />
@@ -3945,8 +4198,8 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
 
       {/* AI Legislator Briefing Modal Overlay */}
       {activeBriefingLegislator && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[100dvh] sm:h-auto sm:max-h-[85dvh] rounded-none sm:rounded-2xl border-0 sm:border">
             
             {/* Header */}
             <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950">
@@ -3961,15 +4214,23 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  setActiveBriefingLegislator(null);
-                  setBriefingText(null);
-                }}
-                className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-950/40 border border-slate-850 hover:border-slate-800 transition-colors font-bold font-mono text-xs cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={handleDownloadBriefing}
+                  disabled={!briefingText}
+                  className="flex items-center gap-2 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-950/40 border border-slate-850 hover:border-slate-800 transition-colors font-bold font-mono text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download size={14} />
+                  Download Report
+                </button>
+                <button onClick={() => {
+                    setActiveBriefingLegislator(null);
+                    setBriefingText(null);
+                  }}
+                  className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-950/40 border border-slate-850 hover:border-slate-800 transition-colors font-bold font-mono text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Body */}
@@ -4056,8 +4317,8 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
 
       {/* Bill Reader & AI Summarizer Modal Overlay */}
       {isViewingBill && currentViewingBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-5xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[85vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-5xl bg-slate-900 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[100dvh] sm:h-auto sm:max-h-[85dvh] rounded-none sm:rounded-2xl border-0 sm:border">
             
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950 shrink-0">
@@ -4075,8 +4336,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => {
+              <button onClick={() => {
                   setIsViewingBill(false);
                   setViewingBillId(null);
                   setViewingBillSummary(null);
@@ -4107,7 +4367,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                     </div>
                     {/* Content on the right */}
                     <div className="flex-1 space-y-1 text-slate-300 font-mono text-[11px] whitespace-pre-wrap leading-[18px]">
-                      {currentViewingBill.fullText}
+                      {currentViewingBill.fullText && <HighlightedBillText text={currentViewingBill.fullText} />}
                     </div>
                   </div>
                 </div>
@@ -4121,8 +4381,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                     AI Layman Summarization
                   </span>
                   {!viewingBillSummary && !isSummarizingBill && (
-                    <button
-                      onClick={() => handleSummarizeBill(currentViewingBill.billNumber, currentViewingBill.title, currentViewingBill.fullText)}
+                    <button onClick={() => handleSummarizeBill(currentViewingBill.billNumber, currentViewingBill.title, currentViewingBill.fullText)}
                       className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-extrabold rounded-lg text-white transition-colors cursor-pointer"
                     >
                       Generate Summary
@@ -4152,8 +4411,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                       <p className="text-[11px] max-w-xs mt-1 leading-relaxed">
                         Have Google Gemini analyze and translate this complex bill text into easy-to-understand bullet points and impact statements.
                       </p>
-                      <button
-                        onClick={() => handleSummarizeBill(currentViewingBill.billNumber, currentViewingBill.title, currentViewingBill.fullText)}
+                      <button onClick={() => handleSummarizeBill(currentViewingBill.billNumber, currentViewingBill.title, currentViewingBill.fullText)}
                         className="mt-4 px-4 py-2 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-xs font-bold rounded-xl text-white flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
                       >
                         <Sparkles size={13} />
@@ -4247,10 +4505,9 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                 </div>
 
                 {/* Fixed Custom Question Input Bar at bottom of column */}
-                <div className="p-4 bg-slate-900/60 border-t border-slate-850 shrink-0 space-y-2">
-                  <div className="relative flex items-center">
-                    <input
-                      type="text"
+                <div className="p-4 bg-slate-900 border-t-2 border-slate-700 shrink-0 space-y-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <input type="text"
                       placeholder={viewingBillSummary ? "Ask about Section 4, small businesses, etc..." : "Generate AI summary first to ask questions..."}
                       disabled={!viewingBillSummary || isQueryingQuestion}
                       value={customQuestion}
@@ -4265,10 +4522,10 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                           );
                         }
                       }}
-                      className="w-full pl-3 pr-10 py-2.5 bg-slate-950 border border-slate-800 focus:border-indigo-500 text-xs text-slate-200 placeholder-slate-500 rounded-xl outline-none transition-all disabled:opacity-50"
+                      aria-label="Ask a question about this bill"
+                      className="flex-1 px-4 py-3 bg-slate-950 border-2 border-slate-700 focus:border-indigo-500 text-sm text-slate-200 placeholder-slate-400 rounded-xl outline-none focus:ring-4 focus:ring-indigo-500/30 transition-all disabled:opacity-50"
                     />
-                    <button
-                      disabled={!viewingBillSummary || isQueryingQuestion || !customQuestion.trim()}
+                    <button disabled={!viewingBillSummary || isQueryingQuestion || !customQuestion.trim()}
                       onClick={() => {
                         handleAskCustomQuestion(
                           currentViewingBill.billNumber,
@@ -4277,13 +4534,19 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                           customQuestion
                         );
                       }}
-                      className="absolute right-1.5 p-1.5 text-indigo-400 hover:text-indigo-300 disabled:opacity-30 disabled:hover:text-indigo-400 transition-colors cursor-pointer"
-                      title="Send Question"
+                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-sm rounded-xl transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-indigo-500/50 flex items-center justify-center gap-2 cursor-pointer"
+                      aria-label="Send Question"
                     >
                       {isQueryingQuestion ? (
-                        <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                        <>
+                          <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                          <span>Sending...</span>
+                        </>
                       ) : (
-                        <Send size={13} />
+                        <>
+                          <Send size={16} aria-hidden="true" />
+                          <span>Ask Question</span>
+                        </>
                       )}
                     </button>
                   </div>
@@ -4334,8 +4597,8 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
 
       {/* Compare Modal Overlay */}
       {showCompareModal && compareSelection.length === 2 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[100dvh] sm:h-auto sm:max-h-[85dvh] rounded-none sm:rounded-2xl border-0 sm:border">
             
             {/* Header */}
             <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950 shrink-0">
@@ -4343,8 +4606,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                 <SlidersHorizontal size={18} className="text-indigo-400" />
                 Head-to-Head Comparison
               </h2>
-              <button 
-                onClick={() => setShowCompareModal(false)}
+              <button onClick={() => setShowCompareModal(false)}
                 className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
               >
                 <X size={16} />
@@ -4454,8 +4716,7 @@ exports.monitorMidnightVotes = onSchedule("*/10 * * * *", async (event) => {
                   </div>
                 </div>
                 {(task.status === 'complete' || task.status === 'error') && (
-                  <button 
-                    onClick={(e) => {
+                  <button onClick={(e) => {
                       e.stopPropagation();
                       removeBackgroundTask(task.id);
                     }}

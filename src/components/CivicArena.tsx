@@ -122,8 +122,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
           </p>
         </div>
 
-        <button
-          onClick={() => {
+        <button onClick={() => {
             if (user) {
               setShowCreateDebate(true);
             } else {
@@ -141,7 +140,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
           {CATEGORIES.map(cat => (
-            <button
+            <button aria-label="setSelectedCategory(cat)} className=`} >"
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -155,23 +154,38 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
           ))}
         </div>
 
-        <div className="relative w-full md:w-[300px]">
-          <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search debate titles or authors..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
-          />
+        <div className="flex w-full md:w-auto items-center gap-2">
+          <div className="relative flex-1 md:w-[320px]">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+            <input type="text"
+              placeholder="Search debates or authors..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search debates"
+              className="w-full bg-slate-950 border-2 border-slate-700 rounded-xl py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all font-medium"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1.5 rounded-full hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                aria-label="Clear search text"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <button 
+            className="h-[44px] px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md hover:shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            aria-label="Submit search"
+          >
+            Search
+          </button>
         </div>
       </div>
 
       {/* Launch Debate Form Overlay */}
       {showCreateDebate && user && (
         <div className="p-5 bg-slate-900 border border-indigo-900/40 rounded-2xl space-y-4 animate-fade-in relative">
-          <button
-            onClick={() => setShowCreateDebate(false)}
+          <button onClick={() => setShowCreateDebate(false)}
             className="absolute top-4 right-4 text-slate-500 hover:text-white"
           >
             <X size={15} />
@@ -186,8 +200,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2 space-y-1.5">
                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Debate Headline</label>
-                <input
-                  type="text"
+                <input type="text"
                   placeholder="e.g. Do Defense Committee assignments impact federal contracting decisions?"
                   value={newDebate.title}
                   onChange={(e) => setNewDebate(prev => ({ ...prev, title: e.target.value }))}
@@ -198,8 +211,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
 
               <div className="space-y-1.5">
                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Topic Category</label>
-                <select
-                  value={newDebate.category}
+                <select value={newDebate.category}
                   onChange={(e) => setNewDebate(prev => ({ ...prev, category: e.target.value as DebatePost['category'] }))}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
                 >
@@ -214,8 +226,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
 
             <div className="space-y-1.5">
               <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Opening Argument / Thesis</label>
-              <textarea
-                placeholder="State your opening claim clearly. Attach details, references, or links to the data provided by OpenFEC or UVA lawmakers databases..."
+              <textarea placeholder="State your opening claim clearly. Attach details, references, or links to the data provided by OpenFEC or UVA lawmakers databases..."
                 value={newDebate.mainArgument}
                 onChange={(e) => setNewDebate(prev => ({ ...prev, mainArgument: e.target.value }))}
                 rows={4}
@@ -225,15 +236,13 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
             </div>
 
             <div className="flex justify-end gap-2.5">
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => setShowCreateDebate(false)}
                 className="px-3.5 py-1.5 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-xs font-semibold"
               >
                 Cancel
               </button>
-              <button
-                type="submit"
+              <button type="submit"
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-indigo-950/20 uppercase tracking-wider"
               >
                 Publish Thesis
@@ -275,24 +284,21 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
               {/* Engagement Controls: Support, Appeal, Discredit */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onVoteDebate(debate.id, 'support')}
+                  <button onClick={() => onVoteDebate(debate.id, 'support')}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/30 hover:bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 text-[10px] font-bold rounded-lg transition-all font-mono"
                     title="Vouch for this thesis as robust and accurate"
                   >
                     👍 Support <span className="text-white font-extrabold bg-emerald-900/40 px-1 rounded">{debate.supportCount}</span>
                   </button>
 
-                  <button
-                    onClick={() => onVoteDebate(debate.id, 'appeal')}
+                  <button onClick={() => onVoteDebate(debate.id, 'appeal')}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/30 hover:bg-indigo-950/60 border border-indigo-900/40 text-indigo-400 text-[10px] font-bold rounded-lg transition-all font-mono"
                     title="Request review, add priority index"
                   >
                     ⚖️ Appeal <span className="text-white font-extrabold bg-indigo-900/40 px-1 rounded">{debate.appealCount}</span>
                   </button>
 
-                  <button
-                    onClick={() => onVoteDebate(debate.id, 'discredit')}
+                  <button onClick={() => onVoteDebate(debate.id, 'discredit')}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/30 hover:bg-rose-950/60 border border-rose-900/40 text-rose-400 text-[10px] font-bold rounded-lg transition-all font-mono"
                     title="Challenge truth value, demand fact-check"
                   >
@@ -300,8 +306,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                   </button>
                 </div>
 
-                <button
-                  onClick={() => {
+                <button onClick={() => {
                     if (user) {
                       setActiveReplyDebateId(activeReplyDebateId === debate.id ? null : debate.id);
                     } else {
@@ -322,7 +327,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                     <span className="text-[9px] font-black text-white uppercase tracking-wider">Post Counter-Argument</span>
                     
                     <div className="flex gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
-                      <button
+                      <button aria-label="setNewChallenge(prev => ())} className=`} > Challe"
                         type="button"
                         onClick={() => setNewChallenge(prev => ({ ...prev, type: 'challenge' }))}
                         className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition-all ${
@@ -331,7 +336,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                       >
                         Challenge
                       </button>
-                      <button
+                      <button aria-label="setNewChallenge(prev => ())} className=`} > Appeal"
                         type="button"
                         onClick={() => setNewChallenge(prev => ({ ...prev, type: 'appeal' }))}
                         className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition-all ${
@@ -340,7 +345,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                       >
                         Appeal
                       </button>
-                      <button
+                      <button aria-label="setNewChallenge(prev => ())} className=`} > Discre"
                         type="button"
                         onClick={() => setNewChallenge(prev => ({ ...prev, type: 'discredit' }))}
                         className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition-all ${
@@ -353,8 +358,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                   </div>
 
                   <div className="space-y-2">
-                    <textarea
-                      placeholder={`Draft your ${newChallenge.type} details here. Include specific reasoning...`}
+                    <textarea placeholder={`Draft your ${newChallenge.type} details here. Include specific reasoning...`}
                       value={newChallenge.argumentText}
                       onChange={(e) => setNewChallenge(prev => ({ ...prev, argumentText: e.target.value }))}
                       rows={2.5}
@@ -364,8 +368,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                     
                     <div className="relative">
                       <Link size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                      <input
-                        type="url"
+                      <input type="url"
                         placeholder="Attach reference URL (e.g. Congress.gov or OpenFEC link)..."
                         value={newChallenge.evidenceUrl}
                         onChange={(e) => setNewChallenge(prev => ({ ...prev, evidenceUrl: e.target.value }))}
@@ -375,15 +378,13 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                   </div>
 
                   <div className="flex justify-end gap-2 text-[10px]">
-                    <button
-                      type="button"
+                    <button type="button"
                       onClick={() => setActiveReplyDebateId(null)}
                       className="px-2.5 py-1 text-slate-500 hover:text-white"
                     >
                       Close
                     </button>
-                    <button
-                      type="submit"
+                    <button type="submit"
                       className="px-3.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold uppercase tracking-wider"
                     >
                       Post {newChallenge.type}

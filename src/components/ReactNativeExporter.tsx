@@ -659,8 +659,7 @@ export function ReactNativeExporter() {
           </div>
         </div>
 
-        <button
-          onClick={handleCopy}
+        <button onClick={handleCopy}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-colors"
         >
           {copied ? (

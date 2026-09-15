@@ -156,7 +156,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                 <p className="text-xs text-slate-400 mt-1">Register your voter status to unlock debate and challenge actions</p>
               </div>
               <div className="flex gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                <button
+                <button aria-label="setIsSignUp(true)} className=`} > Register"
                   onClick={() => setIsSignUp(true)}
                   className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
                     isSignUp ? 'bg-slate-850 text-white shadow' : 'text-slate-500 hover:text-slate-300'
@@ -164,7 +164,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                 >
                   Register
                 </button>
-                <button
+                <button aria-label="setIsSignUp(false)} className=`} > Sign In"
                   onClick={() => setIsSignUp(false)}
                   className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
                     !isSignUp ? 'bg-slate-850 text-white shadow' : 'text-slate-500 hover:text-slate-300'
@@ -190,8 +190,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Full Legal Name</label>
                     <div className="relative">
                       <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                      <input
-                        type="text"
+                      <input type="text"
                         name="name"
                         value={formData.name}
                         onChange={handleInputChange}
@@ -206,8 +205,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Date of Birth</label>
                     <div className="relative">
                       <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                      <input
-                        type="date"
+                      <input type="date"
                         name="birthday"
                         value={formData.birthday}
                         onChange={handleInputChange}
@@ -221,8 +219,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                   {/* Voter Registration status */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Registered Voter?</label>
-                    <select
-                      name="registeredVoter"
+                    <select name="registeredVoter"
                       value={formData.registeredVoter}
                       onChange={handleInputChange}
                       className="w-full bg-slate-950/80 border border-slate-800/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
@@ -236,8 +233,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                   {/* Voter State */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Vesting State</label>
-                    <select
-                      name="voterState"
+                    <select name="voterState"
                       value={formData.voterState}
                       onChange={handleInputChange}
                       className="w-full bg-slate-950/80 border border-slate-800/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono font-bold"
@@ -251,8 +247,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                   {/* Political affiliation */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Party / Lean</label>
-                    <select
-                      name="politicalAffiliation"
+                    <select name="politicalAffiliation"
                       value={formData.politicalAffiliation}
                       onChange={handleInputChange}
                       className="w-full bg-slate-950/80 border border-slate-800/80 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
@@ -271,8 +266,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                 {/* Brief Bio */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Political Bio (Optional)</label>
-                  <textarea
-                    name="bio"
+                  <textarea name="bio"
                     value={formData.bio}
                     onChange={handleInputChange}
                     rows={2}
@@ -305,8 +299,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                       <p className="text-[10px] text-slate-400 leading-normal">
                         Select which existing representative you wish to claim. This authorizes you to publish updates inside the official <strong>Press Room</strong>.
                       </p>
-                      <select
-                        name="representativeId"
+                      <select name="representativeId"
                         value={formData.representativeId}
                         onChange={handleInputChange}
                         className="w-full bg-slate-950 border border-indigo-900/40 rounded-lg py-1.5 px-2.5 text-xs text-indigo-200 focus:outline-none font-bold"
@@ -321,8 +314,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                   )}
                 </div>
 
-                <button
-                  type="submit"
+                <button type="submit"
                   className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-indigo-950/45 transition-colors uppercase tracking-wider flex items-center justify-center gap-2"
                 >
                   <Fingerprint size={14} />
@@ -338,8 +330,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
-                    <button
-                      onClick={handleQuickLoginAsCitizen}
+                    <button onClick={handleQuickLoginAsCitizen}
                       className="bg-slate-950 hover:bg-slate-900 border border-slate-800 p-4 rounded-xl text-left transition-all hover:border-slate-700 flex flex-col justify-between h-[110px]"
                     >
                       <span className="w-7 h-7 rounded-lg bg-emerald-950/50 border border-emerald-900 text-emerald-400 flex items-center justify-center text-xs font-bold">
@@ -351,8 +342,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                       </div>
                     </button>
 
-                    <button
-                      onClick={handleQuickLoginAsRepresentative}
+                    <button onClick={handleQuickLoginAsRepresentative}
                       className="bg-slate-950 hover:bg-slate-900 border border-slate-800 p-4 rounded-xl text-left transition-all hover:border-slate-700 flex flex-col justify-between h-[110px]"
                     >
                       <span className="w-7 h-7 rounded-lg bg-indigo-950/50 border border-indigo-900 text-indigo-400 flex items-center justify-center text-xs font-bold">
@@ -381,8 +371,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                 <h2 className="text-xl font-black text-white tracking-wider uppercase">Active Account</h2>
                 <p className="text-xs text-slate-400 mt-1">Credential verified. You are cleared for debates & broadcasts.</p>
               </div>
-              <button
-                onClick={onLogout}
+              <button onClick={onLogout}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/40 hover:bg-rose-950 border border-rose-900/40 text-rose-400 text-xs font-bold rounded-xl transition-all"
               >
                 <LogOut size={12} />

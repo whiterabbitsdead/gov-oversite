@@ -1,3 +1,4 @@
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useState, useEffect, FormEvent } from 'react';
 import { 
   Building2, 
@@ -239,7 +240,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
         {/* Tab Controls Inside Banner */}
         <div className="flex bg-slate-950 p-1 border border-slate-850 rounded-xl self-start md:self-center shrink-0">
-          <button
+          <button aria-label="setSubTab('audit')} className=`} > County Lookup"
             onClick={() => setSubTab('audit')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer uppercase ${
               subTab === 'audit' 
@@ -250,7 +251,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
             <Search size={13} />
             County Lookup
           </button>
-          <button
+          <button aria-label="setSubTab('complaints')} className=`} > Incidents "
             onClick={() => setSubTab('complaints')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer uppercase ${
               subTab === 'complaints' 
@@ -282,24 +283,24 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                 </p>
               </div>
 
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2 space-y-1">
-                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">County Name</label>
-                    <input
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-2 space-y-1">
+                    <label htmlFor="county-search" className="text-xs font-black uppercase text-slate-300 tracking-wider">County Name</label>
+                    <input id="county-search"
                       type="text"
                       placeholder="e.g. Cook, Travis, Maricopa"
                       value={countySearch}
                       onChange={(e) => setCountySearch(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                      className="w-full bg-slate-950 border-2 border-slate-700 rounded-xl py-2.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 transition-all font-semibold"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">State Code</label>
-                    <select
+                    <label htmlFor="state-search" className="text-xs font-black uppercase text-slate-300 tracking-wider">State Code</label>
+                    <select id="state-search"
                       value={stateSearch}
                       onChange={(e) => setStateSearch(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                      className="w-full bg-slate-950 border-2 border-slate-700 rounded-xl py-2.5 px-4 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 transition-all font-bold cursor-pointer"
                     >
                       {['AZ', 'GA', 'IL', 'TX', 'CA', 'FL', 'NY', 'OH', 'PA', 'MI', 'NC', 'VA', 'WA', 'CO', 'MA', 'TN', 'NV', 'UT'].map(st => (
                         <option key={st} value={st}>{st}</option>
@@ -308,20 +309,20 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleSearchAudit(countySearch, stateSearch)}
+                <button onClick={() => handleSearchAudit(countySearch, stateSearch)}
                   disabled={auditLoading || !countySearch.trim()}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-extrabold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-emerald-500/50"
+                  aria-label="Search County Records"
                 >
                   {auditLoading ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                       <span>Scraping Municipal Records...</span>
                     </>
                   ) : (
                     <>
-                      <Search size={14} />
-                      <span>Run Integrity Audit</span>
+                      <Search size={16} aria-hidden="true" />
+                      <span>Search County Records</span>
                     </>
                   )}
                 </button>
@@ -339,8 +340,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                     { county: "Cook", state: "IL" },
                     { county: "Travis", state: "TX" }
                   ].map((item, idx) => (
-                    <button
-                      key={idx}
+                    <button key={idx}
                       onClick={() => {
                         setCountySearch(item.county);
                         setStateSearch(item.state);
@@ -415,6 +415,41 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                           🛡️ Verified Records
                         </span>
                       )}
+                    </div>
+                  </div>
+
+
+                  {/* Data Visualization Widget: Spending vs Oversight */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-md">
+                    <h4 className="text-xs font-black uppercase text-slate-300 tracking-wider font-mono mb-4 flex items-center gap-2">
+                      <Activity size={14} className="text-indigo-400" />
+                      Budget Allocation vs. Committee Oversight Ratings (Millions)
+                    </h4>
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={[
+                            { category: 'Public Works', budget: 450, oversight: 85, flagged: 15 },
+                            { category: 'Law Enforcement', budget: 750, oversight: 40, flagged: 120 },
+                            { category: 'Education', budget: 620, oversight: 70, flagged: 30 },
+                            { category: 'Health & Human Svcs', budget: 380, oversight: 90, flagged: 10 },
+                            { category: 'Zoning & Dev', budget: 210, oversight: 55, flagged: 65 },
+                          ]}
+                          margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                          <XAxis dataKey="category" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                          <RechartsTooltip 
+                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', fontSize: '12px', borderRadius: '8px', color: '#f1f5f9' }}
+                            itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: '10px' }} iconType="circle" />
+                          <Bar dataKey="budget" name="Total Budget ($M)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="oversight" name="Verified Oversight ($M)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="flagged" name="Flagged / Unaudited ($M)" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
 
@@ -509,8 +544,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                                   <span className="font-bold text-slate-300 block">Audited Tenure</span>
                                   <span>{official.tenure}</span>
                                 </div>
-                                <button
-                                  onClick={() => {
+                                <button onClick={() => {
                                     setNewComplaint({
                                       county: auditResults.county,
                                       state: auditResults.state,
@@ -568,8 +602,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
             <div className="flex items-center gap-3 shrink-0">
               {/* Reporter Mode Simulator Toggle */}
-              <button
-                onClick={() => setReporterMode(!reporterMode)}
+              <button onClick={() => setReporterMode(!reporterMode)}
                 className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase transition-all flex items-center gap-1.5 cursor-pointer ${
                   reporterMode 
                     ? 'bg-indigo-950/40 border-indigo-500 text-indigo-300 shadow-md animate-pulse' 
@@ -581,8 +614,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                 <span>Reporter Mode: {reporterMode ? "Active" : "Disabled"}</span>
               </button>
 
-              <button
-                onClick={() => {
+              <button onClick={() => {
                   setShowSubmitForm(!showSubmitForm);
                   setFormSuccessMessage('');
                 }}
@@ -597,8 +629,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
           {/* New Complaint Form Panel */}
           {showSubmitForm && (
             <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-indigo-950/50 p-6 rounded-2xl space-y-4 animate-fade-in relative shadow-xl">
-              <button
-                onClick={() => setShowSubmitForm(false)}
+              <button onClick={() => setShowSubmitForm(false)}
                 className="absolute top-4 right-4 text-slate-500 hover:text-white"
               >
                 ✕
@@ -619,8 +650,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                   <div className="md:col-span-4 space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">County Location *</label>
-                    <input
-                      type="text"
+                    <input type="text"
                       placeholder="e.g. Maricopa County"
                       required
                       value={newComplaint.county}
@@ -630,8 +660,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">State Code *</label>
-                    <select
-                      value={newComplaint.state}
+                    <select value={newComplaint.state}
                       onChange={(e) => setNewComplaint(prev => ({ ...prev, state: e.target.value }))}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500"
                     >
@@ -642,8 +671,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                   </div>
                   <div className="md:col-span-6 space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Report Category *</label>
-                    <select
-                      value={newComplaint.category}
+                    <select value={newComplaint.category}
                       onChange={(e: any) => setNewComplaint(prev => ({ ...prev, category: e.target.value }))}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500"
                     >
@@ -659,8 +687,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Complaint Headline *</label>
-                  <input
-                    type="text"
+                  <input type="text"
                     placeholder="e.g. Sheriff's Office limits filming in non-restricted County Recorder Counters"
                     required
                     value={newComplaint.title}
@@ -671,8 +698,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Factual Description (Abuse details, officers involved) *</label>
-                  <textarea
-                    rows={3}
+                  <textarea rows={3}
                     placeholder="Provide precise details, dates, times, and actions taken by county officials. Avoid hearsay."
                     required
                     value={newComplaint.description}
@@ -684,8 +710,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Evidence References (Video links, public notices, docs)</label>
-                    <input
-                      type="text"
+                    <input type="text"
                       placeholder="e.g. YouTube clip ID, Board resolution index, PDF URL"
                       value={newComplaint.evidenceDescription}
                       onChange={(e) => setNewComplaint(prev => ({ ...prev, evidenceDescription: e.target.value }))}
@@ -694,8 +719,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Reporter / Citizen Alias (Defaults to profile name)</label>
-                    <input
-                      type="text"
+                    <input type="text"
                       placeholder="Anonymous or Custom Name"
                       value={newComplaint.submittedBy}
                       onChange={(e) => setNewComplaint(prev => ({ ...prev, submittedBy: e.target.value }))}
@@ -704,8 +728,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
+                <button type="submit"
                   disabled={formSubmitLoading}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
                 >
@@ -727,8 +750,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
               <form onSubmit={handleFilterComplaints} className="space-y-3.5">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Text Search</label>
-                  <input
-                    type="text"
+                  <input type="text"
                     placeholder="Search county, title, text..."
                     value={complaintSearch}
                     onChange={(e) => setComplaintSearch(e.target.value)}
@@ -738,8 +760,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Filter Category</label>
-                  <select
-                    value={complaintCategory}
+                  <select value={complaintCategory}
                     onChange={(e) => setComplaintCategory(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
                   >
@@ -755,8 +776,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Audit Case Status</label>
-                  <select
-                    value={complaintStatus}
+                  <select value={complaintStatus}
                     onChange={(e) => setComplaintStatus(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
                   >
@@ -769,8 +789,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                   </select>
                 </div>
 
-                <button
-                  type="submit"
+                <button type="submit"
                   className="w-full py-2 bg-slate-950 hover:bg-slate-850 border border-slate-800 text-xs font-black uppercase tracking-wider text-slate-200 rounded-xl transition-colors cursor-pointer"
                 >
                   Apply Filters
@@ -847,8 +866,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                       </div>
 
                       {/* Vote Button */}
-                      <button
-                        onClick={() => handleUpvoteComplaint(complaint.id)}
+                      <button onClick={() => handleUpvoteComplaint(complaint.id)}
                         className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950 border border-slate-850 hover:border-slate-700 text-slate-300 hover:text-indigo-400 transition-all cursor-pointer font-mono shrink-0"
                       >
                         <Vote size={14} className="text-indigo-400" />
@@ -899,8 +917,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                         </div>
 
                         {selectedComplaintId !== complaint.id ? (
-                          <button
-                            onClick={() => {
+                          <button onClick={() => {
                               setSelectedComplaintId(complaint.id);
                               setReporterStatusInput(complaint.status);
                             }}
@@ -913,8 +930,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Update Public Status Badge</label>
-                                <select
-                                  value={reporterStatusInput}
+                                <select value={reporterStatusInput}
                                   onChange={(e: any) => setReporterStatusInput(e.target.value)}
                                   className="w-full bg-slate-900 border border-slate-800 rounded-lg py-1.5 px-2 text-xs text-white"
                                 >
@@ -929,8 +945,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                               <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">Publish Reporter Briefing Log</label>
                                 <div className="flex gap-2">
-                                  <input
-                                    type="text"
+                                  <input type="text"
                                     placeholder="Append official investigation notes..."
                                     value={reporterNoteInput}
                                     onChange={(e) => setReporterNoteInput(e.target.value)}
@@ -941,14 +956,12 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
                             </div>
 
                             <div className="flex gap-2 justify-end">
-                              <button
-                                onClick={() => setSelectedComplaintId(null)}
+                              <button onClick={() => setSelectedComplaintId(null)}
                                 className="px-3 py-1 bg-slate-900 hover:bg-slate-850 text-slate-400 text-[10px] font-bold rounded"
                               >
                                 Cancel
                               </button>
-                              <button
-                                onClick={() => handleUpdateComplaintByReporter(complaint.id)}
+                              <button onClick={() => handleUpdateComplaintByReporter(complaint.id)}
                                 className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-extrabold rounded"
                               >
                                 Commit Audit Case File Changes

@@ -6,8 +6,11 @@
 import React, { useState, useMemo } from 'react';
 import { Legislator } from '../types';
 import { CustomFlag } from './CustomFlagsPanel';
+import { AnimatedScore } from './AnimatedScore';
 import { 
-  DollarSign, 
+  DollarSign,
+  X,
+  ExternalLink, 
   ShieldAlert, 
   Award, 
   User, 
@@ -36,6 +39,52 @@ interface RepresentativeCardProps {
   onToggleCompare?: (legislatorId: string) => void;
   key?: React.Key;
 }
+
+
+const SOCIETY_INFO: Record<string, { desc: string, members: string[], represents: string, link: string }> = {
+  "Alfalfa Club": {
+    desc: "An exclusive club in Washington, D.C., whose primary event is an annual banquet. Often seen as a gathering of the political and business elite.",
+    members: ["George W. Bush", "Barack Obama", "Warren Buffett"],
+    represents: "A social club for the Washington elite to network.",
+    link: "https://en.wikipedia.org/wiki/Alfalfa_Club"
+  },
+  "Freemasonry": {
+    desc: "A fraternal organization that traces its origins to the local fraternities of stonemasons.",
+    members: ["George Washington", "Benjamin Franklin", "Franklin D. Roosevelt"],
+    represents: "Moral and intellectual development, brotherhood, and philanthropy.",
+    link: "https://en.wikipedia.org/wiki/Freemasonry"
+  },
+  "Phi Beta Kappa": {
+    desc: "The oldest academic honor society in the United States, honoring the most outstanding arts and sciences students.",
+    members: ["Bill Clinton", "Jeff Bezos", "Condoleezza Rice"],
+    represents: "Academic excellence in the liberal arts and sciences.",
+    link: "https://en.wikipedia.org/wiki/Phi_Beta_Kappa"
+  },
+  "Delta Kappa Epsilon": {
+    desc: "One of the oldest North American college fraternities, known for its political connections.",
+    members: ["George H.W. Bush", "Gerald Ford", "Rutherford B. Hayes"],
+    represents: "The education of young men, gentlemanly conduct, and lifelong brotherhood.",
+    link: "https://en.wikipedia.org/wiki/Delta_Kappa_Epsilon"
+  },
+  "Skull and Bones": {
+    desc: "An undergraduate senior secret student society at Yale University.",
+    members: ["George W. Bush", "John Kerry", "William Howard Taft"],
+    represents: "Elite collegiate networking, leadership, and secrecy.",
+    link: "https://en.wikipedia.org/wiki/Skull_and_Bones"
+  },
+  "Odd Fellows": {
+    desc: "An international fraternity consisting of lodges first documented in 1730 in London.",
+    members: ["Ulysses S. Grant", "Warren G. Harding", "Charles Lindbergh"],
+    represents: "Altruism, charity, and fraternal fellowship.",
+    link: "https://en.wikipedia.org/wiki/Odd_Fellows"
+  },
+  "Gridiron Club": {
+    desc: "One of the oldest and most prestigious journalistic organizations in Washington, D.C.",
+    members: ["Major US Journalists", "Various U.S. Presidents (as guests)"],
+    represents: "Journalistic fellowship and satirical political commentary.",
+    link: "https://en.wikipedia.org/wiki/Gridiron_Club"
+  }
+};
 
 export function RepresentativeCard({ 
   legislator, 
@@ -70,6 +119,7 @@ export function RepresentativeCard({
     committee_conflicts
   } = legislator;
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [selectedSociety, setSelectedSociety] = useState<string | null>(null);
 
   // Party styling
   const partyColor =
@@ -185,7 +235,7 @@ export function RepresentativeCard({
   return (
     <div 
       id={`card-${legislator.legislator_id}`}
-      className="bg-slate-900/95 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between"
+      className="bg-slate-900/95 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 shadow-lg hover:shadow-2xl hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 flex flex-col justify-between"
     >
       <div>
         {/* Top Header Row */}
@@ -224,8 +274,7 @@ export function RepresentativeCard({
                   </span>
                 )}
                 {onToggleFavorite && (
-                  <button
-                    onClick={() => onToggleFavorite(legislator.legislator_id)}
+                  <button onClick={() => onToggleFavorite(legislator.legislator_id)}
                     className={`p-1 rounded-md transition-colors ${
                       isFavorite 
                         ? 'text-amber-400 hover:text-amber-300 bg-amber-950/25 border border-amber-900/35' 
@@ -313,7 +362,7 @@ export function RepresentativeCard({
                 <span className={`font-mono font-bold text-xs ${
                   alignmentScore >= 80 ? 'text-emerald-400' : alignmentScore >= 50 ? 'text-amber-400' : 'text-rose-400'
                 }`}>
-                  {alignmentScore}%
+                  <AnimatedScore value={alignmentScore} />%
                 </span>
               </div>
 
@@ -345,8 +394,7 @@ export function RepresentativeCard({
             <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${scoreInfo.badgeBg} ${scoreInfo.color}`}>
               {scoreInfo.label}
             </span>
-            <button
-              onClick={() => setShowBreakdown(!showBreakdown)}
+            <button onClick={() => setShowBreakdown(!showBreakdown)}
               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-0.5 transition-colors"
             >
               <span>{showBreakdown ? 'Hide Breakdown' : 'Show Details'}</span>
@@ -927,8 +975,7 @@ export function RepresentativeCard({
 
         {/* AI Briefing Trigger Button */}
         {onShowBriefing && (
-          <button
-            onClick={() => onShowBriefing(legislator)}
+          <button onClick={() => onShowBriefing(legislator)}
             className="mb-2 w-full py-2 px-3.5 bg-gradient-to-r from-slate-950/60 to-slate-900/60 hover:from-indigo-950/40 hover:to-indigo-900/40 border border-slate-800 hover:border-indigo-800/60 rounded-xl text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm font-mono tracking-wide"
           >
             <Sparkles size={11} className="text-indigo-400 animate-pulse" />
@@ -938,8 +985,7 @@ export function RepresentativeCard({
 
         {/* Committee Findings Scanner Button */}
         {onScanFindings && (
-          <button
-            onClick={() => onScanFindings(legislator)}
+          <button onClick={() => onScanFindings(legislator)}
             className="mb-4 w-full py-2 px-3.5 bg-gradient-to-r from-slate-950/60 to-slate-900/60 hover:from-rose-950/40 hover:to-rose-900/40 border border-slate-800 hover:border-rose-800/60 rounded-xl text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center justify-center gap-1.5 transition-all duration-300 shadow-sm font-mono tracking-wide"
           >
             <Search size={11} className="text-rose-400" />
@@ -965,13 +1011,13 @@ export function RepresentativeCard({
               if (society.includes("Alfalfa")) sColor = "bg-emerald-950/40 text-emerald-400 border-emerald-900/50";
               
               return (
-                <span 
-                  key={idx} 
-                  className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${sColor} flex items-center gap-1`}
+                <button key={idx} 
+                  onClick={() => setSelectedSociety(society)}
+                  className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${sColor} flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity`}
                 >
                   <Award size={10} />
                   {society}
-                </span>
+                </button>
               );
             })}
           </div>
@@ -981,6 +1027,62 @@ export function RepresentativeCard({
           </span>
         )}
       </div>
+
+      {/* Society Details Modal */}
+      {selectedSociety && SOCIETY_INFO[selectedSociety] && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedSociety(null)}>
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950">
+              <h3 className="text-sm font-black text-white tracking-widest font-mono uppercase flex items-center gap-2">
+                <ShieldAlert size={14} className="text-indigo-400" />
+                {selectedSociety}
+              </h3>
+              <button onClick={() => setSelectedSociety(null)}
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">What They Claim to Represent</h4>
+                <p className="text-[11px] text-slate-200 leading-relaxed bg-slate-950/50 p-3 rounded-xl border border-slate-850 font-mono">
+                  {SOCIETY_INFO[selectedSociety].represents}
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Historical Context</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {SOCIETY_INFO[selectedSociety].desc}
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Notable Past & Present Members</h4>
+                <ul className="grid grid-cols-1 gap-2">
+                  {SOCIETY_INFO[selectedSociety].members.map((member, idx) => (
+                    <li key={idx} className="text-xs text-slate-300 flex items-center gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <User size={12} className="text-indigo-400" />
+                      {member}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
+              <a 
+                href={SOCIETY_INFO[selectedSociety].link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 uppercase tracking-wider"
+              >
+                Learn More on Wikipedia <ExternalLink size={12} />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

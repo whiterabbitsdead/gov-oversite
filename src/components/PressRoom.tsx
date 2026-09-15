@@ -89,8 +89,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
         </div>
 
         {user && user.isRepresentative ? (
-          <button
-            onClick={() => setShowBroadcastDesk(true)}
+          <button onClick={() => setShowBroadcastDesk(true)}
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-colors shadow-lg shadow-indigo-950/20 flex items-center justify-center gap-1.5 uppercase tracking-wider shrink-0"
           >
             <Plus size={14} />
@@ -109,8 +108,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
       {/* Broadcast desk compose overlay */}
       {showBroadcastDesk && user && user.isRepresentative && (
         <div className="p-5 bg-slate-900 border border-indigo-900/40 rounded-2xl space-y-4 animate-fade-in relative">
-          <button
-            onClick={() => setShowBroadcastDesk(false)}
+          <button onClick={() => setShowBroadcastDesk(false)}
             className="absolute top-4 right-4 text-slate-500 hover:text-white"
           >
             <X size={15} />
@@ -125,8 +123,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2 space-y-1.5">
                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Statement Headline</label>
-                <input
-                  type="text"
+                <input type="text"
                   placeholder="e.g. My committee stance on high-tech manufacturing subsidies"
                   value={newPost.title}
                   onChange={(e) => setNewPost(prev => ({ ...prev, title: e.target.value }))}
@@ -137,8 +134,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
 
               <div className="space-y-1.5">
                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Broadcast Type</label>
-                <select
-                  value={newPost.category}
+                <select value={newPost.category}
                   onChange={(e) => setNewPost(prev => ({ ...prev, category: e.target.value }))}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
                 >
@@ -152,8 +148,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
 
             <div className="space-y-1.5">
               <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Broadcast Body Content</label>
-              <textarea
-                placeholder="Draft your detailed statement or updates here. Share active committee efforts or campaign funding declarations..."
+              <textarea placeholder="Draft your detailed statement or updates here. Share active committee efforts or campaign funding declarations..."
                 value={newPost.content}
                 onChange={(e) => setNewPost(prev => ({ ...prev, content: e.target.value }))}
                 rows={6}
@@ -163,15 +158,13 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
             </div>
 
             <div className="flex justify-end gap-2.5">
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => setShowBroadcastDesk(false)}
                 className="px-3.5 py-1.5 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-xs font-semibold"
               >
                 Cancel
               </button>
-              <button
-                type="submit"
+              <button type="submit"
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-indigo-950/20 uppercase tracking-wider"
               >
                 Transmit Broadcast
@@ -222,8 +215,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
             {/* Reaction bar */}
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onLikeBroadcast(bc.id)}
+                <button onClick={() => onLikeBroadcast(bc.id)}
                   className="flex items-center gap-1.5 px-3 py-1 bg-rose-950/30 hover:bg-rose-950/60 border border-rose-900/30 text-rose-400 text-[10px] font-bold rounded-lg transition-all"
                 >
                   <Heart size={11} className="fill-rose-400/10" />
@@ -232,8 +224,7 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
                 </button>
               </div>
 
-              <button
-                onClick={() => {
+              <button onClick={() => {
                   setActiveCommentBroadcastId(activeCommentBroadcastId === bc.id ? null : bc.id);
                 }}
                 className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-white uppercase transition-colors"
@@ -246,16 +237,14 @@ export function PressRoom({ user, broadcasts, onAddBroadcast, onAddComment, onLi
             {/* Comment Form Overlay */}
             {activeCommentBroadcastId === bc.id && (
               <form onSubmit={(e) => handlePostComment(e, bc.id)} className="bg-slate-950/50 p-3 rounded-xl border border-slate-850 flex items-center gap-2 animate-fade-in">
-                <input
-                  type="text"
+                <input type="text"
                   placeholder="Post objective constituent feedback or inquiries..."
                   value={newCommentText}
                   onChange={(e) => setNewCommentText(e.target.value)}
                   className="flex-1 bg-transparent text-xs text-white placeholder-slate-600 focus:outline-none font-semibold px-2"
                   required
                 />
-                <button
-                  type="submit"
+                <button type="submit"
                   className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
                 >
                   <Send size={12} />

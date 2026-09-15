@@ -190,8 +190,7 @@ export function CustomFlagsPanel({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 Rule Label / Title
               </label>
-              <input
-                type="text"
+              <input type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Extreme PAC Funding Threshold"
@@ -212,7 +211,7 @@ export function CustomFlagsPanel({
                   { id: 'transparency_index', label: 'Transparency score' },
                   { id: 'late_night_votes', label: 'Midnight Votes count' },
                 ].map((item) => (
-                  <button
+                  <button aria-label="handleMetricChange(item.id as any)} className=`} >"
                     key={item.id}
                     type="button"
                     onClick={() => handleMetricChange(item.id as any)}
@@ -235,8 +234,7 @@ export function CustomFlagsPanel({
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Operator
                 </label>
-                <select
-                  value={operator}
+                <select value={operator}
                   onChange={(e: any) => setOperator(e.target.value)}
                   className="w-full h-10 px-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
                 >
@@ -249,8 +247,7 @@ export function CustomFlagsPanel({
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Threshold Value
                 </label>
-                <input
-                  type="number"
+                <input type="number"
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   required
@@ -274,8 +271,7 @@ export function CustomFlagsPanel({
                   else activeStyle = "bg-red-950 text-red-400";
 
                   return (
-                    <button
-                      key={sev}
+                    <button key={sev}
                       type="button"
                       onClick={() => setSeverity(sev)}
                       className={`flex-1 py-1.5 rounded text-[9px] font-black uppercase transition-all ${
@@ -296,8 +292,7 @@ export function CustomFlagsPanel({
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 Flag Warning Description
               </label>
-              <textarea
-                value={description}
+              <textarea value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="e.g. Lawmaker is funded heavily by foreign PAC interests contrary to public disclosures."
                 rows={2}
@@ -306,8 +301,7 @@ export function CustomFlagsPanel({
             </div>
 
             {/* Submit */}
-            <button
-              type="submit"
+            <button type="submit"
               className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
             >
               <Plus size={14} />
@@ -394,8 +388,7 @@ export function CustomFlagsPanel({
                           <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase border ${badgeStyle}`}>
                             {flag.severity}
                           </span>
-                          <button
-                            onClick={() => onRemoveFlag(flag.id)}
+                          <button onClick={() => onRemoveFlag(flag.id)}
                             className="p-1 text-slate-500 hover:text-rose-400 rounded transition-colors"
                             title="Delete rule"
                           >
@@ -413,8 +406,7 @@ export function CustomFlagsPanel({
                           Estimated matching legislators: <strong className={projectedMatches > 0 ? "text-amber-400 font-mono" : "text-slate-500 font-mono"}>{projectedMatches}</strong>
                         </span>
 
-                        <button
-                          onClick={() => onRunScan(flag)}
+                        <button onClick={() => onRunScan(flag)}
                           className="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-900/60 hover:border-indigo-700/80 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
                         >
                           <Play size={10} className="fill-indigo-300" />
@@ -433,8 +425,7 @@ export function CustomFlagsPanel({
               Custom rules reside purely in active client state. You can scan repeatedly to test the alert pipelines.
             </span>
             {customFlags.length > 0 && (
-              <button
-                onClick={() => {
+              <button onClick={() => {
                   customFlags.forEach(f => onRunScan(f));
                 }}
                 className="py-1.5 px-3 bg-gradient-to-r from-emerald-950 to-indigo-950 hover:from-emerald-900 hover:to-indigo-900 text-white text-[10px] font-bold rounded-lg border border-indigo-900/60 transition-all flex items-center gap-1.5 cursor-pointer self-end md:self-auto"
