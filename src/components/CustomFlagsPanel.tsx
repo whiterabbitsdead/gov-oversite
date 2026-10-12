@@ -211,7 +211,7 @@ export function CustomFlagsPanel({
                   { id: 'transparency_index', label: 'Transparency score' },
                   { id: 'late_night_votes', label: 'Midnight Votes count' },
                 ].map((item) => (
-                  <button aria-label="handleMetricChange(item.id as any)} className=`} >"
+                  <button aria-label="Select metric"
                     key={item.id}
                     type="button"
                     onClick={() => handleMetricChange(item.id as any)}

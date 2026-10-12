@@ -156,7 +156,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                 <p className="text-xs text-slate-400 mt-1">Register your voter status to unlock debate and challenge actions</p>
               </div>
               <div className="flex gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
-                <button aria-label="setIsSignUp(true)} className=`} > Register"
+                <button aria-label="Register account"
                   onClick={() => setIsSignUp(true)}
                   className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
                     isSignUp ? 'bg-slate-850 text-white shadow' : 'text-slate-500 hover:text-slate-300'
@@ -164,7 +164,7 @@ export function AccountPanel({ user, onLogin, onLogout, legislators }: AccountPa
                 >
                   Register
                 </button>
-                <button aria-label="setIsSignUp(false)} className=`} > Sign In"
+                <button aria-label="Sign in"
                   onClick={() => setIsSignUp(false)}
                   className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
                     !isSignUp ? 'bg-slate-850 text-white shadow' : 'text-slate-500 hover:text-slate-300'

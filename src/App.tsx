@@ -1654,7 +1654,7 @@ export default function App() {
             
                         {/* Dashboard Sub-Navigation */}
             <div className="flex flex-wrap items-center justify-center gap-2 mb-6 bg-slate-900/60 p-2 rounded-2xl border border-slate-800/80 w-full max-w-4xl mx-auto shadow-md">
-              <button aria-label="setDashboardTab('directory')} className=`} > Membe"
+              <button aria-label="Set dashboard tab to directory"
                 onClick={() => setDashboardTab('directory')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'directory' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1663,7 +1663,7 @@ export default function App() {
                 <Users size={14} />
                 Members Directory
               </button>
-              <button aria-label="setDashboardTab('scorecard')} className=`} > Watch"
+              <button aria-label="Set dashboard tab to scorecard"
                 onClick={() => setDashboardTab('scorecard')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'scorecard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1672,7 +1672,7 @@ export default function App() {
                 <SlidersHorizontal size={14} />
                 Watchlist & Scorecard
               </button>
-              <button aria-label="setDashboardTab('metrics')} className=`} > Quick M"
+              <button aria-label="Set dashboard tab to metrics"
                 onClick={() => setDashboardTab('metrics')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'metrics' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1681,7 +1681,7 @@ export default function App() {
                 <Activity size={14} />
                 Quick Metrics
               </button>
-              <button aria-label="setDashboardTab('pac')} className=`} > PAC Trends"
+              <button aria-label="Set dashboard tab to PAC"
                 onClick={() => setDashboardTab('pac')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'pac' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1690,7 +1690,7 @@ export default function App() {
                 <Coins size={14} />
                 PAC Trends
               </button>
-              <button aria-label="setDashboardTab('events')} className=`} > Live Fee"
+              <button aria-label="Set dashboard tab to live feed"
                 onClick={() => setDashboardTab('events')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'events' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1699,7 +1699,7 @@ export default function App() {
                 <BellRing size={14} />
                 Live Feed & Outreach
               </button>
-              <button aria-label="setDashboardTab('advisor')} className=`} > AI Advi"
+              <button aria-label="Set dashboard tab to advisor"
                 onClick={() => setDashboardTab('advisor')}
                 className={`px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-1.5 ${
                   dashboardTab === 'advisor' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -2520,7 +2520,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
+                        <button aria-label="Set user preference"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, lobbyistWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2551,7 +2551,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
+                        <button aria-label="Set user preference"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, transparencyWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2582,7 +2582,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
+                        <button aria-label="Set user preference"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, diligenceWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2613,7 +2613,7 @@ export default function App() {
                     </div>
                     <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-850 self-end sm:self-center shrink-0">
                       {(['low', 'medium', 'high'] as const).map((w) => (
-                        <button aria-label="setUserPrefs(prev => ())} className=`} >"
+                        <button aria-label="Set user preference"
                           key={w}
                           onClick={() => setUserPrefs(prev => ({ ...prev, independenceWeight: w }))}
                           className={`text-[10px] font-black uppercase px-2.5 py-1 rounded transition-colors cursor-pointer ${
@@ -2696,13 +2696,13 @@ export default function App() {
 
                     <div className="flex flex-col gap-3 lg:items-end shrink-0">
                       <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start lg:self-end">
-                        <button aria-label="setPacChartView('individual')} className=`} > Indi"
+                        <button aria-label="Set PAC chart view to individual"
                           onClick={() => setPacChartView('individual')}
                           className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pacChartView === 'individual' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
                         >
                           Individual Detail
                         </button>
-                        <button aria-label="setPacChartView('comparison')} className=`} > Comp"
+                        <button aria-label="Set PAC chart view to comparison"
                           onClick={() => setPacChartView('comparison')}
                           className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pacChartView === 'comparison' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
                         >
@@ -2860,14 +2860,14 @@ export default function App() {
                               Corporate PAC Funding ($)
                             </span>
                             <span className="flex items-center gap-2 text-[9px] text-slate-500">
-                              <button aria-label="setShowSpikes(!showSpikes)} className=`} > High Sp" 
+                              <button aria-label="Toggle spikes" 
                                 onClick={() => setShowSpikes(!showSpikes)}
                                 className={`flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-80 ${showSpikes ? 'opacity-100' : 'opacity-40 grayscale'}`}
                               >
                                 <span className="w-1.5 h-1.5 rounded bg-red-500 inline-block"></span>
                                 High Spike (&gt;35% above avg)
                               </button>
-                              <button aria-label="setShowDips(!showDips)} className=`} > Low Dip (&g" 
+                              <button aria-label="Toggle dips" 
                                 onClick={() => setShowDips(!showDips)}
                                 className={`flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-80 ${showDips ? 'opacity-100' : 'opacity-40 grayscale'}`}
                               >
@@ -3400,7 +3400,7 @@ export default function App() {
                   </label>
                   <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-850">
                     {(['All', 'Democrat', 'Republican', 'Independent'] as const).map((party) => (
-                      <button aria-label="setPartyFilter(party)} className=`} >"
+                      <button aria-label="Set party filter"
                         key={party}
                         onClick={() => setPartyFilter(party)}
                         className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${
@@ -3442,7 +3442,7 @@ export default function App() {
                   </label>
                   <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-850">
                     {(['All', 'Representative', 'Senator'] as const).map((chamber) => (
-                      <button aria-label="setRoleFilter(chamber)} className=`} >"
+                      <button aria-label="Set role filter"
                         key={chamber}
                         onClick={() => setRoleFilter(chamber)}
                         className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${
@@ -3488,7 +3488,7 @@ export default function App() {
                   Congressional Representatives Index
                 </h3>
                 <div className="flex items-center gap-3">
-                  <button aria-label="} className=`} > Compare Mode"
+                  <button aria-label="Compare mode"
                     onClick={() => {
                       setIsCompareMode(!isCompareMode);
                       if (isCompareMode) setCompareSelection([]); // Clear selection when turning off
@@ -3586,7 +3586,7 @@ export default function App() {
                   
                   {/* Mode Selector */}
                   <div className="grid grid-cols-2 bg-slate-950 p-1 rounded-xl border border-slate-850 mb-4">
-                    <button aria-label="setIsCustomBill(false)} className=`} > Preloaded B"
+                    <button aria-label="Switch to preloaded bill"
                       onClick={() => setIsCustomBill(false)}
                       className={`text-xs font-bold py-2 rounded-lg transition-colors ${
                         !isCustomBill ? 'bg-slate-850 text-white' : 'text-slate-400 hover:text-white'
@@ -3594,7 +3594,7 @@ export default function App() {
                     >
                       Preloaded Bills
                     </button>
-                    <button aria-label="setIsCustomBill(true)} className=`} > Custom Submi"
+                    <button aria-label="Switch to custom bill"
                       onClick={() => setIsCustomBill(true)}
                       className={`text-xs font-bold py-2 rounded-lg transition-colors ${
                         isCustomBill ? 'bg-slate-850 text-white' : 'text-slate-400 hover:text-white'

@@ -240,7 +240,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
 
         {/* Tab Controls Inside Banner */}
         <div className="flex bg-slate-950 p-1 border border-slate-850 rounded-xl self-start md:self-center shrink-0">
-          <button aria-label="setSubTab('audit')} className=`} > County Lookup"
+          <button aria-label="Choose audit tab"
             onClick={() => setSubTab('audit')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer uppercase ${
               subTab === 'audit' 
@@ -251,7 +251,7 @@ export function LocalAuditHub({ user }: LocalAuditHubProps) {
             <Search size={13} />
             County Lookup
           </button>
-          <button aria-label="setSubTab('complaints')} className=`} > Incidents "
+          <button aria-label="Choose complaints tab"
             onClick={() => setSubTab('complaints')}
             className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer uppercase ${
               subTab === 'complaints' 

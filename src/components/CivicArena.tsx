@@ -140,7 +140,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
           {CATEGORIES.map(cat => (
-            <button aria-label="setSelectedCategory(cat)} className=`} >"
+            <button aria-label="Select category"
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -327,7 +327,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                     <span className="text-[9px] font-black text-white uppercase tracking-wider">Post Counter-Argument</span>
                     
                     <div className="flex gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
-                      <button aria-label="setNewChallenge(prev => ())} className=`} > Challe"
+                      <button aria-label="Set challenge type to challenge"
                         type="button"
                         onClick={() => setNewChallenge(prev => ({ ...prev, type: 'challenge' }))}
                         className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition-all ${
@@ -336,7 +336,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                       >
                         Challenge
                       </button>
-                      <button aria-label="setNewChallenge(prev => ())} className=`} > Appeal"
+                      <button aria-label="Set challenge type to appeal"
                         type="button"
                         onClick={() => setNewChallenge(prev => ({ ...prev, type: 'appeal' }))}
                         className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition-all ${
@@ -345,7 +345,7 @@ export function CivicArena({ user, debates, onAddDebate, onAddChallenge, onVoteD
                       >
                         Appeal
                       </button>
-                      <button aria-label="setNewChallenge(prev => ())} className=`} > Discre"
+                      <button aria-label="Set challenge type to discredit"
                         type="button"
                         onClick={() => setNewChallenge(prev => ({ ...prev, type: 'discredit' }))}
                         className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition-all ${
